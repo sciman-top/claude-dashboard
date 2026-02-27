@@ -276,6 +276,41 @@ function getVisualWidth(str) {
 function getSeparator() {
   return ` ${getTheme().dim}\u2502${RESET} `;
 }
+var ANSI_ESCAPE = /\x1b\[[0-9;]*m/;
+function truncateToWidth(str, maxWidth) {
+  if (maxWidth <= 0)
+    return "";
+  if (getVisualWidth(str) <= maxWidth)
+    return str;
+  const targetWidth = maxWidth - 1;
+  let result = "";
+  let currentWidth = 0;
+  let i = 0;
+  while (i < str.length) {
+    if (str.charCodeAt(i) === 27) {
+      const ansiMatch = str.slice(i).match(ANSI_ESCAPE);
+      if (ansiMatch && ansiMatch.index === 0) {
+        result += ansiMatch[0];
+        i += ansiMatch[0].length;
+        continue;
+      }
+    }
+    const cp = str.codePointAt(i) ?? 0;
+    if (cp >= 65024 && cp <= 65039) {
+      result += str[i];
+      i++;
+      continue;
+    }
+    const charWidth = isWideChar(cp) ? 2 : 1;
+    if (currentWidth + charWidth > targetWidth)
+      break;
+    const char = String.fromCodePoint(cp);
+    result += char;
+    currentWidth += charWidth;
+    i += char.length;
+  }
+  return result + "\u2026" + RESET;
+}
 
 // scripts/utils/api-client.ts
 import { readFile as readFile2, writeFile, mkdir, readdir, stat as stat2, unlink } from "fs/promises";
@@ -343,7 +378,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.14.0";
+var VERSION = "1.15.0";
 
 // scripts/utils/api-client.ts
 var API_TIMEOUT_MS = 5e3;
@@ -2652,39 +2687,74 @@ async function collectWidgetData(widgetId, ctx) {
     return null;
   }
 }
-function renderCollectedWidgets(collected, ctx) {
-  const separator = getSeparator();
-  return collected.filter((w) => w !== null).map((w) => {
-    try {
-      return w.widget.render(w.data, ctx);
-    } catch (error) {
-      debugLog("widget", `Widget '${w.widget.id}' render failed`, error);
-      return "";
-    }
-  }).filter((o) => o.length > 0).join(separator);
+var COMPACT_THRESHOLD = 0.5;
+var MIN_EFFECTIVE_WIDTH = 40;
+function getEffectiveWidth(config) {
+  const termWidth = getTerminalWidth();
+  const outerPadding = 4;
+  const rightReserve = config.rightReserve ?? 25;
+  return Math.max(MIN_EFFECTIVE_WIDTH, termWidth - outerPadding - rightReserve);
 }
-async function renderLine(widgetIds, ctx) {
+function renderWidget(widget, data, ctx, effectiveWidth) {
+  try {
+    const normal = widget.render(data, ctx);
+    if (getVisualWidth(normal) <= effectiveWidth * COMPACT_THRESHOLD) {
+      return normal;
+    }
+    const compact = widget.render(data, { ...ctx, compact: true });
+    if (getVisualWidth(compact) > effectiveWidth) {
+      return truncateToWidth(compact, effectiveWidth);
+    }
+    return compact;
+  } catch (error) {
+    debugLog("widget", `Widget '${widget.id}' render failed`, error);
+    return "";
+  }
+}
+async function renderLineWithWrap(widgetIds, ctx, effectiveWidth) {
   const collected = await Promise.all(
     widgetIds.map((id) => collectWidgetData(id, ctx))
   );
-  const normalOutput = renderCollectedWidgets(collected, ctx);
-  const termWidth = getTerminalWidth();
-  const normalWidth = getVisualWidth(normalOutput);
-  if (normalWidth > termWidth) {
-    debugLog("render", `Line width ${normalWidth} > terminal ${termWidth}, switching to compact`);
-    const compactOutput = renderCollectedWidgets(collected, { ...ctx, compact: true });
-    const compactWidth = getVisualWidth(compactOutput);
-    if (compactWidth > termWidth) {
-      debugLog("render", `Compact width ${compactWidth} still > terminal ${termWidth}`);
+  const valid = collected.filter(
+    (w) => w !== null
+  );
+  if (valid.length === 0)
+    return [];
+  const separator = getSeparator();
+  const sepWidth = getVisualWidth(separator);
+  const resultLines = [];
+  let currentRendered = [];
+  let currentWidth = 0;
+  for (const item of valid) {
+    const rendered = renderWidget(item.widget, item.data, ctx, effectiveWidth);
+    if (rendered === "")
+      continue;
+    const widgetWidth = getVisualWidth(rendered);
+    const needsSeparator = currentRendered.length > 0;
+    const addedWidth = needsSeparator ? sepWidth + widgetWidth : widgetWidth;
+    if (needsSeparator && currentWidth + addedWidth > effectiveWidth) {
+      resultLines.push(currentRendered.join(separator));
+      currentRendered = [rendered];
+      currentWidth = widgetWidth;
+    } else {
+      currentRendered.push(rendered);
+      currentWidth += addedWidth;
     }
-    return compactOutput;
   }
-  return normalOutput;
+  if (currentRendered.length > 0) {
+    resultLines.push(currentRendered.join(separator));
+  }
+  return resultLines;
 }
 async function renderAllLines(ctx) {
-  const lines = getLines(ctx.config);
-  const rendered = await Promise.all(lines.map((lineWidgets) => renderLine(lineWidgets, ctx)));
-  return rendered.filter((line) => line.length > 0);
+  const configLines = getLines(ctx.config);
+  const effectiveWidth = getEffectiveWidth(ctx.config);
+  const allLines = [];
+  for (const lineWidgets of configLines) {
+    const wrapped = await renderLineWithWrap(lineWidgets, ctx, effectiveWidth);
+    allLines.push(...wrapped);
+  }
+  return allLines.filter((line) => line.length > 0);
 }
 async function formatOutput(ctx) {
   const lines = await renderAllLines(ctx);
