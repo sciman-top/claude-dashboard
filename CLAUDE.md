@@ -144,7 +144,16 @@ Color themes via `getTheme()` semantic roles. Set `"theme"` in config.
 
 ### Adaptive Terminal Width
 
-When a rendered line exceeds the terminal width, it is automatically re-rendered in **compact mode** (`ctx.compact = true`). This is per-line: narrow lines stay normal, wide lines switch to compact.
+When widgets on a line exceed the **effective width**, they automatically **wrap to the next line** instead of being removed. Individual widgets switch to compact mode when they exceed 50% of the effective width. As a final safety net, `truncateToWidth()` truncates any widget that still overflows even in compact mode.
+
+```
+effectiveWidth = terminalWidth - outerPadding(4) - rightReserve(default 25)
+minimum: 40
+```
+
+- `outerPadding = 4`: Claude Code's `paddingX={2}` → 2 chars per side
+- `rightReserve = 25`: reserved for Claude Code's right-side notification area
+- Set `"rightReserve"` in config to adjust (e.g., `40` for wider notifications)
 
 Terminal width detection: `stdout.columns → stderr.columns → $COLUMNS → 120`.
 
