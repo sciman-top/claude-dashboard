@@ -102,6 +102,8 @@ export interface Config {
   disabledWidgets?: WidgetId[];
   /** Color theme */
   theme?: ThemeId;
+  /** Reserved width for right-side content (Claude Code notifications). Default: 25 */
+  rightReserve?: number;
   cache: {
     ttlSeconds: number;
   };

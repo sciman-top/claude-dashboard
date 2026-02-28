@@ -297,3 +297,51 @@ export function getVisualWidth(str: string): number {
 export function getSeparator(): string {
   return ` ${getTheme().dim}│${RESET} `;
 }
+
+/** Regex to match a single ANSI escape sequence */
+const ANSI_ESCAPE = /\x1b\[[0-9;]*m/;
+
+/**
+ * Truncate a string (possibly containing ANSI escape codes) to fit within maxWidth visual columns.
+ * Preserves ANSI sequences and appends '…' + RESET if truncated.
+ */
+export function truncateToWidth(str: string, maxWidth: number): string {
+  if (maxWidth <= 0) return '';
+  if (getVisualWidth(str) <= maxWidth) return str;
+
+  const targetWidth = maxWidth - 1; // reserve 1 column for '…'
+  let result = '';
+  let currentWidth = 0;
+  let i = 0;
+
+  while (i < str.length) {
+    // Fast-path: only attempt ANSI regex when we see an escape character
+    if (str.charCodeAt(i) === 0x1b) {
+      const ansiMatch = str.slice(i).match(ANSI_ESCAPE);
+      if (ansiMatch && ansiMatch.index === 0) {
+        result += ansiMatch[0];
+        i += ansiMatch[0].length;
+        continue;
+      }
+    }
+
+    const cp = str.codePointAt(i) ?? 0;
+
+    // Variation selectors are zero-width
+    if (cp >= 0xFE00 && cp <= 0xFE0F) {
+      result += str[i];
+      i++;
+      continue;
+    }
+
+    const charWidth = isWideChar(cp) ? 2 : 1;
+    if (currentWidth + charWidth > targetWidth) break;
+
+    const char = String.fromCodePoint(cp);
+    result += char;
+    currentWidth += charWidth;
+    i += char.length; // advance past surrogate pairs
+  }
+
+  return result + '…' + RESET;
+}
