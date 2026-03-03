@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 // scripts/statusline.ts
-import { readFile as readFile7, stat as stat8 } from "fs/promises";
-import { join as join5 } from "path";
-import { homedir as homedir4 } from "os";
+import { readFile as readFile8, stat as stat8 } from "fs/promises";
+import { join as join6 } from "path";
+import { homedir as homedir5 } from "os";
 
 // scripts/types.ts
 var DISPLAY_PRESETS = {
@@ -17,10 +17,40 @@ var DISPLAY_PRESETS = {
   detailed: [
     ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "zaiUsage"],
     ["projectInfo", "sessionId", "sessionDuration", "burnRate", "depletionTime", "todoProgress"],
-    ["configCounts", "toolActivity", "agentStatus", "cacheHit"],
-    ["codexUsage", "geminiUsage"]
+    ["configCounts", "toolActivity", "agentStatus", "cacheHit", "performance"],
+    ["tokenBreakdown", "forecast", "budget", "codexUsage", "geminiUsage"]
   ]
 };
+var PRESET_CHAR_MAP = {
+  M: "model",
+  C: "context",
+  $: "cost",
+  R: "rateLimit5h",
+  "7": "rateLimit7d",
+  S: "rateLimit7dSonnet",
+  P: "projectInfo",
+  I: "sessionId",
+  D: "sessionDuration",
+  T: "toolActivity",
+  A: "agentStatus",
+  O: "todoProgress",
+  B: "burnRate",
+  E: "depletionTime",
+  H: "cacheHit",
+  X: "codexUsage",
+  G: "geminiUsage",
+  Z: "zaiUsage",
+  K: "configCounts",
+  N: "tokenBreakdown",
+  F: "performance",
+  W: "forecast",
+  U: "budget"
+};
+function parsePreset(preset) {
+  return preset.split("|").map(
+    (line) => [...line].map((ch) => PRESET_CHAR_MAP[ch]).filter((id) => id !== void 0)
+  ).filter((line) => line.length > 0);
+}
 var DEFAULT_CONFIG = {
   language: "auto",
   plan: "max",
@@ -201,6 +231,108 @@ var THEMES = {
     cyan: "\x1B[38;2;139;233;253m",
     white: "\x1B[38;2;248;248;242m",
     gray: "\x1B[38;2;98;114;164m"
+  },
+  nord: {
+    dim: "\x1B[2m",
+    bold: "\x1B[1m",
+    model: "\x1B[38;2;136;192;208m",
+    // #88c0d0 frost cyan
+    folder: "\x1B[38;2;235;203;139m",
+    // #ebcb8b yellow
+    branch: "\x1B[38;2;180;142;173m",
+    // #b48ead purple
+    safe: "\x1B[38;2;163;190;140m",
+    // #a3be8c green
+    warning: "\x1B[38;2;235;203;139m",
+    // #ebcb8b yellow
+    danger: "\x1B[38;2;191;97;106m",
+    // #bf616a red
+    secondary: "\x1B[38;2;76;86;106m",
+    // #4c566a polar night
+    accent: "\x1B[38;2;208;135;112m",
+    // #d08770 orange
+    info: "\x1B[38;2;129;161;193m",
+    // #81a1c1 frost blue
+    barFilled: "\x1B[38;2;163;190;140m",
+    // #a3be8c green
+    barEmpty: "\x1B[38;2;67;76;94m",
+    // #434c5e polar night
+    red: "\x1B[38;2;191;97;106m",
+    green: "\x1B[38;2;163;190;140m",
+    yellow: "\x1B[38;2;235;203;139m",
+    blue: "\x1B[38;2;129;161;193m",
+    magenta: "\x1B[38;2;180;142;173m",
+    cyan: "\x1B[38;2;136;192;208m",
+    white: "\x1B[38;2;236;239;244m",
+    gray: "\x1B[38;2;76;86;106m"
+  },
+  tokyoNight: {
+    dim: "\x1B[2m",
+    bold: "\x1B[1m",
+    model: "\x1B[38;2;122;162;247m",
+    // #7aa2f7 blue
+    folder: "\x1B[38;2;224;175;104m",
+    // #e0af68 yellow
+    branch: "\x1B[38;2;187;154;247m",
+    // #bb9af7 purple
+    safe: "\x1B[38;2;158;206;106m",
+    // #9ece6a green
+    warning: "\x1B[38;2;224;175;104m",
+    // #e0af68 yellow
+    danger: "\x1B[38;2;247;118;142m",
+    // #f7768e red
+    secondary: "\x1B[38;2;86;95;137m",
+    // #565f89 comment
+    accent: "\x1B[38;2;255;158;100m",
+    // #ff9e64 orange
+    info: "\x1B[38;2;125;207;255m",
+    // #7dcfff cyan
+    barFilled: "\x1B[38;2;158;206;106m",
+    // #9ece6a green
+    barEmpty: "\x1B[38;2;59;66;97m",
+    // #3b4261 dark
+    red: "\x1B[38;2;247;118;142m",
+    green: "\x1B[38;2;158;206;106m",
+    yellow: "\x1B[38;2;224;175;104m",
+    blue: "\x1B[38;2;122;162;247m",
+    magenta: "\x1B[38;2;187;154;247m",
+    cyan: "\x1B[38;2;125;207;255m",
+    white: "\x1B[38;2;169;177;214m",
+    gray: "\x1B[38;2;86;95;137m"
+  },
+  solarized: {
+    dim: "\x1B[2m",
+    bold: "\x1B[1m",
+    model: "\x1B[38;2;38;139;210m",
+    // #268bd2 blue
+    folder: "\x1B[38;2;181;137;0m",
+    // #b58900 yellow
+    branch: "\x1B[38;2;211;54;130m",
+    // #d33682 magenta
+    safe: "\x1B[38;2;133;153;0m",
+    // #859900 green
+    warning: "\x1B[38;2;181;137;0m",
+    // #b58900 yellow
+    danger: "\x1B[38;2;220;50;47m",
+    // #dc322f red
+    secondary: "\x1B[38;2;88;110;117m",
+    // #586e75 base01
+    accent: "\x1B[38;2;203;75;22m",
+    // #cb4b16 orange
+    info: "\x1B[38;2;42;161;152m",
+    // #2aa198 cyan
+    barFilled: "\x1B[38;2;133;153;0m",
+    // #859900 green
+    barEmpty: "\x1B[38;2;7;54;66m",
+    // #073642 base02
+    red: "\x1B[38;2;220;50;47m",
+    green: "\x1B[38;2;133;153;0m",
+    yellow: "\x1B[38;2;181;137;0m",
+    blue: "\x1B[38;2;38;139;210m",
+    magenta: "\x1B[38;2;211;54;130m",
+    cyan: "\x1B[38;2;42;161;152m",
+    white: "\x1B[38;2;253;246;227m",
+    gray: "\x1B[38;2;88;110;117m"
   }
 };
 var activeTheme = THEMES.default;
@@ -273,8 +405,22 @@ function getVisualWidth(str) {
   }
   return width;
 }
+var SEPARATOR_CHARS = {
+  pipe: "\u2502",
+  space: " ",
+  dot: "\xB7",
+  arrow: "\u203A",
+  powerline: ""
+};
+var activeSeparatorStyle = "pipe";
+function setSeparatorStyle(style) {
+  activeSeparatorStyle = style && style in SEPARATOR_CHARS ? style : "pipe";
+}
 function getSeparator() {
-  return ` ${getTheme().dim}\u2502${RESET} `;
+  const char = SEPARATOR_CHARS[activeSeparatorStyle];
+  if (activeSeparatorStyle === "space")
+    return "  ";
+  return ` ${getTheme().dim}${char}${RESET} `;
 }
 var ANSI_ESCAPE = /\x1b\[[0-9;]*m/;
 function truncateToWidth(str, maxWidth) {
@@ -378,7 +524,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.15.0";
+var VERSION = "1.16.0";
 
 // scripts/utils/api-client.ts
 var API_TIMEOUT_MS = 5e3;
@@ -567,7 +713,11 @@ var en_default = {
     hooks: "Hooks",
     burnRate: "Rate",
     cache: "Cache",
-    toLimit: "to"
+    toLimit: "to",
+    forecast: "Forecast",
+    budget: "Budget",
+    performance: "Perf",
+    tokenBreakdown: "Tokens"
   },
   checkUsage: {
     title: "CLI Usage Dashboard",
@@ -616,7 +766,11 @@ var ko_default = {
     hooks: "\uD6C5",
     burnRate: "\uC18C\uBAA8\uC728",
     cache: "\uCE90\uC2DC",
-    toLimit: "\uD6C4"
+    toLimit: "\uD6C4",
+    forecast: "\uC608\uCE21",
+    budget: "\uC608\uC0B0",
+    performance: "\uC131\uB2A5",
+    tokenBreakdown: "\uD1A0\uD070"
   },
   checkUsage: {
     title: "CLI \uC0AC\uC6A9\uB7C9 \uB300\uC2DC\uBCF4\uB4DC",
@@ -1100,7 +1254,7 @@ async function countClaudeMd(projectDir) {
   return count;
 }
 async function countMcps(projectDir) {
-  const { readFile: readFile8 } = await import("fs/promises");
+  const { readFile: readFile9 } = await import("fs/promises");
   const homeDir = process.env.HOME || "";
   const mcpPaths = [
     { path: join3(projectDir, ".claude", "mcp.json"), key: "mcpServers" },
@@ -1111,7 +1265,7 @@ async function countMcps(projectDir) {
   for (const { path: path4, key } of mcpPaths) {
     if (await pathExists(path4)) {
       try {
-        const content = await readFile8(path4, "utf-8");
+        const content = await readFile9(path4, "utf-8");
         const config = JSON.parse(content);
         totalCount += Object.keys(config[key] || {}).length;
       } catch {
@@ -2634,6 +2788,221 @@ var sessionIdFullWidget = {
   }
 };
 
+// scripts/widgets/token-breakdown.ts
+var tokenBreakdownWidget = {
+  id: "tokenBreakdown",
+  name: "Token Breakdown",
+  async getData(ctx) {
+    const usage = ctx.stdin.context_window?.current_usage;
+    if (!usage)
+      return null;
+    const { input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens } = usage;
+    const total = input_tokens + output_tokens + cache_creation_input_tokens + cache_read_input_tokens;
+    if (total === 0)
+      return null;
+    return {
+      inputTokens: input_tokens,
+      outputTokens: output_tokens,
+      cacheWriteTokens: cache_creation_input_tokens,
+      cacheReadTokens: cache_read_input_tokens
+    };
+  },
+  render(data, ctx) {
+    const theme = getTheme();
+    if (ctx.compact) {
+      const parts2 = [];
+      if (data.inputTokens > 0)
+        parts2.push(`I:${formatTokens(data.inputTokens)}`);
+      if (data.outputTokens > 0)
+        parts2.push(`O:${formatTokens(data.outputTokens)}`);
+      return `\u{1F4CA} ${parts2.join(" ")}`;
+    }
+    const parts = [];
+    if (data.inputTokens > 0)
+      parts.push(`${colorize("In", theme.info)} ${formatTokens(data.inputTokens)}`);
+    if (data.outputTokens > 0)
+      parts.push(`${colorize("Out", theme.accent)} ${formatTokens(data.outputTokens)}`);
+    if (data.cacheWriteTokens > 0)
+      parts.push(`${colorize("W", theme.warning)} ${formatTokens(data.cacheWriteTokens)}`);
+    if (data.cacheReadTokens > 0)
+      parts.push(`${colorize("R", theme.safe)} ${formatTokens(data.cacheReadTokens)}`);
+    return `\u{1F4CA} ${parts.join(colorize(" \xB7 ", theme.secondary))}`;
+  }
+};
+
+// scripts/widgets/performance.ts
+var GOOD_THRESHOLD = 70;
+var OK_THRESHOLD = 40;
+var performanceWidget = {
+  id: "performance",
+  name: "Performance",
+  async getData(ctx) {
+    const usage = ctx.stdin.context_window?.current_usage;
+    if (!usage)
+      return null;
+    const totalTokens = usage.input_tokens + usage.output_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
+    if (totalTokens === 0)
+      return null;
+    const elapsedMinutes = await getSessionElapsedMinutes(ctx, 0);
+    if (elapsedMinutes === null || elapsedMinutes === 0)
+      return null;
+    const totalInput = usage.cache_read_input_tokens + usage.input_tokens + usage.cache_creation_input_tokens;
+    const cacheHitRate = totalInput > 0 ? usage.cache_read_input_tokens / totalInput * 100 : 0;
+    const outputRatio = usage.output_tokens / totalTokens * 100;
+    const score = Math.min(100, Math.max(0, Math.round(cacheHitRate * 0.6 + outputRatio * 0.4)));
+    return {
+      score,
+      cacheHitRate: Math.round(cacheHitRate),
+      outputRatio: Math.round(outputRatio)
+    };
+  },
+  render(data, ctx) {
+    const theme = getTheme();
+    let badge;
+    let color;
+    if (data.score >= GOOD_THRESHOLD) {
+      badge = "\u{1F7E2}";
+      color = theme.safe;
+    } else if (data.score >= OK_THRESHOLD) {
+      badge = "\u{1F7E1}";
+      color = theme.warning;
+    } else {
+      badge = "\u{1F534}";
+      color = theme.danger;
+    }
+    if (ctx.compact) {
+      return `${badge} ${colorize(`${data.score}`, color)}`;
+    }
+    return `${badge} ${colorize(`${data.score}%`, color)}`;
+  }
+};
+
+// scripts/widgets/forecast.ts
+var forecastWidget = {
+  id: "forecast",
+  name: "Cost Forecast",
+  async getData(ctx) {
+    const totalCost = ctx.stdin.cost?.total_cost_usd ?? 0;
+    if (totalCost <= 0)
+      return null;
+    const elapsedMinutes = await getSessionElapsedMinutes(ctx, 1);
+    if (elapsedMinutes === null || elapsedMinutes === 0)
+      return null;
+    const costPerMinute = totalCost / elapsedMinutes;
+    const hourlyCost = costPerMinute * 60;
+    if (!Number.isFinite(hourlyCost) || hourlyCost < 0)
+      return null;
+    return {
+      currentCost: totalCost,
+      hourlyCost,
+      costPerMinute
+    };
+  },
+  render(data, ctx) {
+    const theme = getTheme();
+    let hourlyColor;
+    if (data.hourlyCost > 10) {
+      hourlyColor = theme.danger;
+    } else if (data.hourlyCost > 5) {
+      hourlyColor = theme.warning;
+    } else {
+      hourlyColor = theme.safe;
+    }
+    if (ctx.compact) {
+      return `\u{1F4C8} ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
+    }
+    return `\u{1F4C8} ${colorize(`${formatCost(data.currentCost)}`, theme.accent)} \u2192 ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
+  }
+};
+
+// scripts/utils/budget.ts
+import { readFile as readFile7, mkdir as mkdir4, writeFile as writeFile4 } from "fs/promises";
+import { join as join5 } from "path";
+import { homedir as homedir4 } from "os";
+var BUDGET_DIR = join5(homedir4(), ".cache", "claude-dashboard");
+var BUDGET_FILE = join5(BUDGET_DIR, "budget.json");
+var budgetCache = null;
+function getToday() {
+  return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+}
+async function loadBudgetState() {
+  const today = getToday();
+  if (budgetCache && budgetCache.date === today) {
+    return budgetCache;
+  }
+  const fresh = { date: today, dailyTotal: 0, sessions: {} };
+  try {
+    const content = await readFile7(BUDGET_FILE, "utf-8");
+    const state = JSON.parse(content);
+    if (state.date !== today)
+      return fresh;
+    budgetCache = state;
+    return state;
+  } catch {
+    return fresh;
+  }
+}
+async function saveBudgetState(state) {
+  try {
+    await mkdir4(BUDGET_DIR, { recursive: true });
+    await writeFile4(BUDGET_FILE, JSON.stringify(state), "utf-8");
+    budgetCache = state;
+  } catch (error) {
+    debugLog("budget", "Failed to save budget state", error);
+  }
+}
+async function recordCostAndGetDaily(sessionId, sessionCost) {
+  const state = await loadBudgetState();
+  const lastSeen = state.sessions[sessionId] ?? 0;
+  const delta = Math.max(0, sessionCost - lastSeen);
+  state.dailyTotal += delta;
+  state.sessions[sessionId] = sessionCost;
+  saveBudgetState(state).catch(() => {
+  });
+  return state.dailyTotal;
+}
+
+// scripts/widgets/budget.ts
+var WARNING_THRESHOLD = 0.8;
+var DANGER_THRESHOLD = 0.95;
+var budgetWidget = {
+  id: "budget",
+  name: "Budget",
+  async getData(ctx) {
+    const { dailyBudget } = ctx.config;
+    if (!dailyBudget || dailyBudget <= 0)
+      return null;
+    const sessionCost = ctx.stdin.cost?.total_cost_usd ?? 0;
+    const sessionId = ctx.stdin.session_id || "default";
+    const dailyTotal = await recordCostAndGetDaily(sessionId, sessionCost);
+    return {
+      dailyTotal,
+      dailyBudget,
+      utilization: Math.min(1, dailyTotal / dailyBudget)
+    };
+  },
+  render(data, ctx) {
+    const theme = getTheme();
+    const percent = Math.round(data.utilization * 100);
+    let color;
+    let icon;
+    if (data.utilization >= DANGER_THRESHOLD) {
+      color = theme.danger;
+      icon = "\u{1F6A8}";
+    } else if (data.utilization >= WARNING_THRESHOLD) {
+      color = theme.warning;
+      icon = "\u26A0\uFE0F";
+    } else {
+      color = theme.safe;
+      icon = "\u{1F4B5}";
+    }
+    if (ctx.compact) {
+      return `${icon} ${colorize(`${formatCost(data.dailyTotal)}/${formatCost(data.dailyBudget)}`, color)}`;
+    }
+    return `${icon} ${colorize(`${formatCost(data.dailyTotal)}`, color)} / ${colorize(formatCost(data.dailyBudget), theme.secondary)} ${colorize(`(${percent}%)`, color)}`;
+  }
+};
+
 // scripts/widgets/index.ts
 var widgetRegistry = /* @__PURE__ */ new Map([
   ["model", modelWidget],
@@ -2656,7 +3025,11 @@ var widgetRegistry = /* @__PURE__ */ new Map([
   ["geminiUsageAll", geminiUsageAllWidget],
   ["zaiUsage", zaiUsageWidget],
   ["sessionId", sessionIdWidget],
-  ["sessionIdFull", sessionIdFullWidget]
+  ["sessionIdFull", sessionIdFullWidget],
+  ["tokenBreakdown", tokenBreakdownWidget],
+  ["performance", performanceWidget],
+  ["forecast", forecastWidget],
+  ["budget", budgetWidget]
 ]);
 function getWidget(id) {
   return widgetRegistry.get(id);
@@ -2764,7 +3137,7 @@ async function formatOutput(ctx) {
 }
 
 // scripts/statusline.ts
-var CONFIG_PATH = join5(homedir4(), ".claude", "claude-dashboard.local.json");
+var CONFIG_PATH = join6(homedir5(), ".claude", "claude-dashboard.local.json");
 var configCache = null;
 async function readStdin() {
   try {
@@ -2785,12 +3158,19 @@ async function loadConfig() {
     if (configCache?.mtime === mtime) {
       return configCache.config;
     }
-    const content = await readFile7(CONFIG_PATH, "utf-8");
+    const content = await readFile8(CONFIG_PATH, "utf-8");
     const userConfig = JSON.parse(content);
     const config = {
       ...DEFAULT_CONFIG,
       ...userConfig
     };
+    if (config.preset) {
+      const lines = parsePreset(config.preset);
+      if (lines.length > 0) {
+        config.displayMode = "custom";
+        config.lines = lines;
+      }
+    }
     configCache = { config, mtime };
     return config;
   } catch {
@@ -2800,6 +3180,7 @@ async function loadConfig() {
 async function main() {
   const config = await loadConfig();
   setTheme(config.theme);
+  setSeparatorStyle(config.separator);
   const translations = getTranslations(config);
   const stdin = await readStdin();
   if (!stdin) {
