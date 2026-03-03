@@ -43,7 +43,11 @@ claude-dashboard/
 │   │   ├── depletion-time.ts # Depletion time widget
 │   │   ├── codex-usage.ts   # Codex CLI usage widget
 │   │   ├── gemini-usage.ts  # Gemini CLI usage widget
-│   │   └── zai-usage.ts     # z.ai/ZHIPU usage widget
+│   │   ├── zai-usage.ts     # z.ai/ZHIPU usage widget
+│   │   ├── token-breakdown.ts # Token breakdown widget
+│   │   ├── performance.ts   # Performance badge widget
+│   │   ├── forecast.ts      # Cost forecast widget
+│   │   └── budget.ts        # Budget tracking widget
 │   └── utils/
 │       ├── api-client.ts    # OAuth API client with caching
 │       ├── codex-client.ts  # Codex CLI API client
@@ -58,6 +62,7 @@ claude-dashboard/
 │       ├── i18n.ts          # Internationalization
 │       ├── progress-bar.ts  # Progress bar rendering
 │       ├── session.ts       # Session duration tracking
+│       ├── budget.ts        # Budget tracking utilities
 │       └── transcript-parser.ts # Transcript JSONL parsing
 ├── locales/
 │   ├── en.json              # English translations
@@ -106,6 +111,10 @@ interface Widget<T extends WidgetData> {
 | `geminiUsage` | Gemini API | Google Gemini CLI usage (current model only) |
 | `geminiUsageAll` | Gemini API | Google Gemini CLI usage (all model buckets) |
 | `zaiUsage` | z.ai API | z.ai/ZHIPU GLM usage (5h tokens, 1m MCP) |
+| `tokenBreakdown` | stdin | Input/output/cache write/read token breakdown |
+| `performance` | stdin + session | Composite efficiency badge (cache hit + output ratio) |
+| `forecast` | stdin + session | Estimated hourly cost based on session rate |
+| `budget` | stdin + file | Daily spending vs configured budget limit |
 
 ### Display Modes
 
@@ -124,11 +133,34 @@ const DISPLAY_PRESETS = {
   detailed: [
     ['model', 'context', 'cost', 'rateLimit5h', 'rateLimit7d', 'rateLimit7dSonnet', 'zaiUsage'],
     ['projectInfo', 'sessionId', 'sessionDuration', 'burnRate', 'depletionTime', 'todoProgress'],
-    ['configCounts', 'toolActivity', 'agentStatus', 'cacheHit'],
-    ['codexUsage', 'geminiUsage'],
+    ['configCounts', 'toolActivity', 'agentStatus', 'cacheHit', 'performance'],
+    ['tokenBreakdown', 'forecast', 'budget', 'codexUsage', 'geminiUsage'],
   ],
 };
 ```
+
+### Preset Shortcuts
+
+Quick widget layout via single-character shorthand. Set `"preset"` in config, use `|` to separate lines.
+
+```json
+{ "preset": "MC$R|BDO" }
+```
+
+| Char | Widget | Char | Widget |
+|------|--------|------|--------|
+| `M` | model | `T` | toolActivity |
+| `C` | context | `A` | agentStatus |
+| `$` | cost | `O` | todoProgress |
+| `R` | rateLimit5h | `B` | burnRate |
+| `7` | rateLimit7d | `E` | depletionTime |
+| `S` | rateLimit7dSonnet | `H` | cacheHit |
+| `P` | projectInfo | `X` | codexUsage |
+| `I` | sessionId | `G` | geminiUsage |
+| `D` | sessionDuration | `Z` | zaiUsage |
+| `K` | configCounts | `N` | tokenBreakdown |
+| `F` | performance | `W` | forecast |
+| `U` | budget | | |
 
 ### Theme System
 
@@ -141,6 +173,21 @@ Color themes via `getTheme()` semantic roles. Set `"theme"` in config.
 | `catppuccin` | Catppuccin Mocha palette |
 | `dracula` | Dracula palette |
 | `gruvbox` | Gruvbox palette |
+| `nord` | Nord polar night/frost palette |
+| `tokyoNight` | Tokyo Night blue/purple palette |
+| `solarized` | Solarized dark palette |
+
+### Separator Styles
+
+Widget separator style via `"separator"` in config.
+
+| Style | Character | Example |
+|-------|-----------|---------|
+| `pipe` (default) | `│` | `Model │ Context │ Cost` |
+| `space` | ` ` | `Model  Context  Cost` |
+| `dot` | `·` | `Model · Context · Cost` |
+| `arrow` | `›` | `Model › Context › Cost` |
+| `powerline` | `` | `Model  Context  Cost` |
 
 ### Adaptive Terminal Width
 
@@ -166,6 +213,10 @@ Compact rendering per widget:
 - `todoProgress`: drop task name
 - `burnRate`: `/m` instead of `/min`
 - `depletionTime`: drop limit type label
+- `tokenBreakdown`: show only input + output (`I:30K O:8K`)
+- `performance`: drop `%` suffix
+- `forecast`: drop current cost, show only hourly estimate
+- `budget`: drop percentage
 
 ### Widget Toggle
 

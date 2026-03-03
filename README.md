@@ -46,7 +46,7 @@ git clone https://github.com/uppinote20/claude-dashboard.git ~/.claude/plugins/c
 
 ![Detailed](images/detailed.png)
 
-> Adds depletion time, config counts, tool activity, agent status, cache hit, Codex/Gemini usage
+> Adds depletion time, config counts, tool/agent status, cache hit, performance badge, token breakdown, forecast, budget, Codex/Gemini usage
 
 Multi-provider support: z.ai/ZHIPU, Codex, Gemini auto-detected when installed.
 
@@ -77,9 +77,13 @@ Multi-provider support: z.ai/ZHIPU, Codex, Gemini auto-detected when installed.
 | | `geminiUsage` | Google Gemini CLI - current model (auto-hide if not installed)³ |
 | | `geminiUsageAll` | Google Gemini CLI - all models (auto-hide if not installed)³ |
 | | `zaiUsage` | z.ai/ZHIPU usage (auto-hide if not using z.ai)⁴ |
+| **Insights** | `tokenBreakdown` | Input/output/cache write/read token breakdown |
+| | `performance` | Composite efficiency badge (cache hit + output ratio) |
+| | `forecast` | Estimated hourly cost based on session rate |
+| | `budget` | Daily spending vs configured budget limit⁵ |
 
 > ¹ Assumes all utilization came from this session; improves as session runs longer.
-> ² Auto-hides if `~/.codex/auth.json` not found. ³ Auto-hides if `~/.gemini/oauth_creds.json` not found. ⁴ Auto-hides if not detected via `ANTHROPIC_BASE_URL`.
+> ² Auto-hides if `~/.codex/auth.json` not found. ³ Auto-hides if `~/.gemini/oauth_creds.json` not found. ⁴ Auto-hides if not detected via `ANTHROPIC_BASE_URL`. ⁵ Requires `"dailyBudget"` in config.
 
 i18n: English and Korean supported (auto-detect or set via setup).
 
@@ -114,7 +118,7 @@ i18n: English and Korean supported (auto-detect or set via setup).
 |------|-------|---------|
 | `compact` | 1 | model, context, cost, rateLimit5h/7d/7dSonnet, zaiUsage |
 | `normal` | 2 | + projectInfo, sessionId, sessionDuration, burnRate, todoProgress |
-| `detailed` | 4 | + depletionTime, configCounts, toolActivity, agentStatus, cacheHit, codexUsage, geminiUsage |
+| `detailed` | 4 | + depletionTime, configCounts, toolActivity, agentStatus, cacheHit, performance, tokenBreakdown, forecast, budget, codexUsage, geminiUsage |
 
 **Configuration file** (`~/.claude/claude-dashboard.local.json`):
 
@@ -128,12 +132,29 @@ i18n: English and Korean supported (auto-detect or set via setup).
     ["projectInfo", "todoProgress"]
   ],
   "theme": "default",
+  "separator": "pipe",
+  "dailyBudget": 15,
   "disabledWidgets": [],
   "cache": { "ttlSeconds": 60 }
 }
 ```
 
-**Themes:** `default` (pastel) / `minimal` (monochrome) / `catppuccin` / `dracula` / `gruvbox`
+Or use preset shorthand for quick configuration:
+```json
+{
+  "preset": "MC$R|BDO",
+  "theme": "tokyoNight",
+  "separator": "dot"
+}
+```
+
+**Themes:** `default` (pastel) / `minimal` (monochrome) / `catppuccin` / `dracula` / `gruvbox` / `nord` / `tokyoNight` / `solarized`
+
+**Separators:** `pipe` (│, default) / `space` / `dot` (·) / `arrow` (›) / `powerline` ()
+
+**Preset Shortcuts:** Quick layout with single characters — `"preset": "MC$R|BDO"` (M=model, C=context, $=cost, R=rateLimit5h, etc.)
+
+**Budget Tracking:** Set `"dailyBudget": 15` to track daily spending. Shows ⚠️ at 80% and 🚨 at 95%.
 
 **Widget Toggle:** Add widget IDs to `disabledWidgets` to hide them from any display mode.
 
