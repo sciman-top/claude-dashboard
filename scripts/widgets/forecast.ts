@@ -43,9 +43,6 @@ export const forecastWidget: Widget<ForecastData> = {
       hourlyColor = theme.safe;
     }
 
-    if (ctx.compact) {
-      return `📈 ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
-    }
     return `📈 ${colorize(`${formatCost(data.currentCost)}`, theme.accent)} → ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
   },
 };

@@ -48,9 +48,6 @@ export const budgetWidget: Widget<BudgetData> = {
       icon = '💵';
     }
 
-    if (ctx.compact) {
-      return `${icon} ${colorize(`${formatCost(data.dailyTotal)}/${formatCost(data.dailyBudget)}`, color)}`;
-    }
     return `${icon} ${colorize(`${formatCost(data.dailyTotal)}`, color)} / ${colorize(formatCost(data.dailyBudget), theme.secondary)} ${colorize(`(${percent}%)`, color)}`;
   },
 };

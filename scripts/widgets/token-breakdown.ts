@@ -29,15 +29,8 @@ export const tokenBreakdownWidget: Widget<TokenBreakdownData> = {
     };
   },
 
-  render(data: TokenBreakdownData, ctx: WidgetContext): string {
+  render(data: TokenBreakdownData, _ctx: WidgetContext): string {
     const theme = getTheme();
-
-    if (ctx.compact) {
-      const parts: string[] = [];
-      if (data.inputTokens > 0) parts.push(`I:${formatTokens(data.inputTokens)}`);
-      if (data.outputTokens > 0) parts.push(`O:${formatTokens(data.outputTokens)}`);
-      return `📊 ${parts.join(' ')}`;
-    }
 
     const parts: string[] = [];
     if (data.inputTokens > 0) parts.push(`${colorize('In', theme.info)} ${formatTokens(data.inputTokens)}`);

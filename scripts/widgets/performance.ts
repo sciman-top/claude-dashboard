@@ -62,9 +62,6 @@ export const performanceWidget: Widget<PerformanceData> = {
       color = theme.danger;
     }
 
-    if (ctx.compact) {
-      return `${badge} ${colorize(`${data.score}`, color)}`;
-    }
     return `${badge} ${colorize(`${data.score}%`, color)}`;
   },
 };

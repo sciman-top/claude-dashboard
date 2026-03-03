@@ -378,33 +378,6 @@ function getColorForPercent(percent) {
 function colorize(text, color) {
   return `${color}${text}${RESET}`;
 }
-function stripAnsi(str) {
-  return str.replace(/\x1b\[[0-9;]*m/g, "");
-}
-function isWideChar(cp) {
-  return cp >= 4352 && cp <= 4447 || // Hangul Jamo
-  cp >= 9728 && cp <= 10175 || // Misc symbols (⚙ etc.)
-  cp >= 11904 && cp <= 12350 || // CJK Radicals
-  cp >= 12352 && cp <= 13247 || // Japanese
-  cp >= 13312 && cp <= 19903 || // CJK Ext A
-  cp >= 19968 && cp <= 40959 || // CJK Unified
-  cp >= 44032 && cp <= 55215 || // Hangul Syllables
-  cp >= 63744 && cp <= 64255 || // CJK Compatibility
-  cp >= 65072 && cp <= 65135 || // CJK Compatibility Forms
-  cp >= 65281 && cp <= 65376 || // Fullwidth Forms
-  cp > 126976;
-}
-function getVisualWidth(str) {
-  const stripped = stripAnsi(str);
-  let width = 0;
-  for (const ch of stripped) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (cp >= 65024 && cp <= 65039)
-      continue;
-    width += isWideChar(cp) ? 2 : 1;
-  }
-  return width;
-}
 var SEPARATOR_CHARS = {
   pipe: "\u2502",
   space: " ",
@@ -421,41 +394,6 @@ function getSeparator() {
   if (activeSeparatorStyle === "space")
     return "  ";
   return ` ${getTheme().dim}${char}${RESET} `;
-}
-var ANSI_ESCAPE = /\x1b\[[0-9;]*m/;
-function truncateToWidth(str, maxWidth) {
-  if (maxWidth <= 0)
-    return "";
-  if (getVisualWidth(str) <= maxWidth)
-    return str;
-  const targetWidth = maxWidth - 1;
-  let result = "";
-  let currentWidth = 0;
-  let i = 0;
-  while (i < str.length) {
-    if (str.charCodeAt(i) === 27) {
-      const ansiMatch = str.slice(i).match(ANSI_ESCAPE);
-      if (ansiMatch && ansiMatch.index === 0) {
-        result += ansiMatch[0];
-        i += ansiMatch[0].length;
-        continue;
-      }
-    }
-    const cp = str.codePointAt(i) ?? 0;
-    if (cp >= 65024 && cp <= 65039) {
-      result += str[i];
-      i++;
-      continue;
-    }
-    const charWidth = isWideChar(cp) ? 2 : 1;
-    if (currentWidth + charWidth > targetWidth)
-      break;
-    const char = String.fromCodePoint(cp);
-    result += char;
-    currentWidth += charWidth;
-    i += char.length;
-  }
-  return result + "\u2026" + RESET;
 }
 
 // scripts/utils/api-client.ts
@@ -991,7 +929,6 @@ function renderProgressBar(percent, config = DEFAULT_PROGRESS_BAR_CONFIG) {
 }
 
 // scripts/widgets/context.ts
-var COMPACT_PROGRESS_BAR_WIDTH = 6;
 var contextWidget = {
   id: "context",
   name: "Context",
@@ -1020,17 +957,14 @@ var contextWidget = {
       percentage
     };
   },
-  render(data, ctx) {
+  render(data, _ctx) {
     const parts = [];
-    const barConfig = ctx.compact ? { ...DEFAULT_PROGRESS_BAR_CONFIG, width: COMPACT_PROGRESS_BAR_WIDTH } : void 0;
-    parts.push(renderProgressBar(data.percentage, barConfig));
+    parts.push(renderProgressBar(data.percentage));
     const percentColor = getColorForPercent(data.percentage);
     parts.push(colorize(`${data.percentage}%`, percentColor));
-    if (!ctx.compact) {
-      parts.push(
-        `${formatTokens(data.inputTokens)}/${formatTokens(data.contextSize)}`
-      );
-    }
+    parts.push(
+      `${formatTokens(data.inputTokens)}/${formatTokens(data.contextSize)}`
+    );
     return parts.join(getSeparator());
   }
 };
@@ -1058,7 +992,7 @@ function renderRateLimit(data, ctx, labelKey) {
   const { translations: t } = ctx;
   const color = getColorForPercent(data.utilization);
   const label = `${t.labels[labelKey]}: ${colorize(`${data.utilization}%`, color)}`;
-  if (ctx.compact || !data.resetsAt)
+  if (!data.resetsAt)
     return label;
   return `${label} (${formatTimeRemaining(data.resetsAt, t)})`;
 }
@@ -1119,7 +1053,6 @@ var rateLimit7dSonnetWidget = {
 // scripts/widgets/project-info.ts
 import { execFile } from "child_process";
 import { basename } from "path";
-var COMPACT_DIR_MAX_LENGTH = 10;
 function execGit(args, cwd, timeout) {
   return new Promise((resolve, reject) => {
     execFile("git", ["--no-optional-locks", ...args], {
@@ -1196,14 +1129,10 @@ var projectInfoWidget = {
       behind
     };
   },
-  render(data, ctx) {
+  render(data, _ctx) {
     const theme = getTheme();
     const parts = [];
-    let dirName = data.dirName;
-    if (ctx.compact && dirName.length > COMPACT_DIR_MAX_LENGTH) {
-      dirName = dirName.slice(0, COMPACT_DIR_MAX_LENGTH - 1) + "\u2026";
-    }
-    parts.push(colorize(`\u{1F4C1} ${dirName}`, theme.folder));
+    parts.push(colorize(`\u{1F4C1} ${data.dirName}`, theme.folder));
     if (data.gitBranch) {
       let branchStr = data.gitBranch;
       const aheadStr = (data.ahead ?? 0) > 0 ? `\u2191${data.ahead}` : "";
@@ -1299,17 +1228,6 @@ var configCountsWidget = {
   render(data, ctx) {
     const { translations: t } = ctx;
     const parts = [];
-    if (ctx.compact) {
-      if (data.claudeMd > 0)
-        parts.push(`C:${data.claudeMd}`);
-      if (data.rules > 0)
-        parts.push(`R:${data.rules}`);
-      if (data.mcps > 0)
-        parts.push(`M:${data.mcps}`);
-      if (data.hooks > 0)
-        parts.push(`H:${data.hooks}`);
-      return colorize(parts.join(" "), getTheme().secondary);
-    }
     if (data.claudeMd > 0) {
       parts.push(`${t.widgets.claudeMd}: ${data.claudeMd}`);
     }
@@ -1640,12 +1558,6 @@ var toolActivityWidget = {
   render(data, ctx) {
     const { translations: t } = ctx;
     const theme = getTheme();
-    if (ctx.compact) {
-      if (data.running.length === 0) {
-        return colorize(`\u2699\uFE0F ${data.completed}\u2713`, theme.secondary);
-      }
-      return `${colorize("\u2699\uFE0F", theme.warning)} ${data.running.length}\u25B6${data.completed}\u2713`;
-    }
     if (data.running.length === 0) {
       return colorize(
         `${t.widgets.tools}: ${data.completed} ${t.widgets.done}`,
@@ -1680,12 +1592,6 @@ var agentStatusWidget = {
   render(data, ctx) {
     const { translations: t } = ctx;
     const theme = getTheme();
-    if (ctx.compact) {
-      if (data.active.length === 0) {
-        return colorize(`\u{1F916} ${data.completed}\u2713`, theme.secondary);
-      }
-      return `${colorize("\u{1F916}", theme.info)} ${data.active.length}\u25B6${data.completed}\u2713`;
-    }
     if (data.active.length === 0) {
       return colorize(
         `${t.widgets.agent}: ${data.completed} ${t.widgets.done}`,
@@ -1723,7 +1629,7 @@ var todoProgressWidget = {
     }
     const percent = calculatePercent(data.completed, data.total);
     const color = getColorForPercent(100 - percent);
-    if (data.current && !ctx.compact) {
+    if (data.current) {
       const taskName = data.current.content.length > 15 ? data.current.content.slice(0, 15) + "..." : data.current.content;
       return `${colorize("\u2713", theme.safe)} ${taskName} [${data.completed}/${data.total}]`;
     }
@@ -1762,10 +1668,7 @@ var burnRateWidget = {
     }
     return { tokensPerMinute };
   },
-  render(data, ctx) {
-    if (ctx.compact) {
-      return `\u{1F525} ${formatTokens(Math.round(data.tokensPerMinute))}/m`;
-    }
+  render(data, _ctx) {
     return `\u{1F525} ${formatTokens(Math.round(data.tokensPerMinute))}/min`;
   }
 };
@@ -1799,9 +1702,6 @@ var depletionTimeWidget = {
   render(data, ctx) {
     const { translations: t } = ctx;
     const duration = formatDuration(data.minutesToLimit * 60 * 1e3, t.time);
-    if (ctx.compact) {
-      return colorize(`\u23F3 ~${duration}`, getTheme().warning);
-    }
     return colorize(`\u23F3 ~${duration} ${t.widgets.toLimit} ${data.limitType}`, getTheme().warning);
   }
 };
@@ -2037,7 +1937,7 @@ async function fetchFromCodexApi(auth) {
 function formatRateLimit(label, percent, resetAt, ctx) {
   const color = getColorForPercent(percent);
   let result = `${label}: ${colorize(`${Math.round(percent)}%`, color)}`;
-  if (!ctx.compact && resetAt) {
+  if (resetAt) {
     const resetTime = formatTimeRemaining(new Date(resetAt * 1e3), ctx.translations);
     if (resetTime) {
       result += ` (${resetTime})`;
@@ -2472,7 +2372,7 @@ async function fetchFromGeminiApi(credentials, projectId) {
 function formatUsage(percent, resetAt, ctx) {
   const color = getColorForPercent(percent);
   let result = colorize(`${Math.round(percent)}%`, color);
-  if (!ctx.compact && resetAt) {
+  if (resetAt) {
     const resetTime = formatTimeRemaining(new Date(resetAt), ctx.translations);
     if (resetTime) {
       result += ` (${resetTime})`;
@@ -2744,14 +2644,14 @@ var zaiUsageWidget = {
     } else {
       if (data.tokensPercent !== null) {
         let tokenPart = `${t.labels["5h"]}: ${formatPercent(data.tokensPercent)}`;
-        if (!ctx.compact && data.tokensResetAt) {
+        if (data.tokensResetAt) {
           tokenPart += ` (${formatTimeRemaining(new Date(data.tokensResetAt), t)})`;
         }
         parts.push(tokenPart);
       }
       if (data.mcpPercent !== null) {
         let mcpPart = `${t.labels["1m"]}: ${formatPercent(data.mcpPercent)}`;
-        if (!ctx.compact && data.mcpResetAt) {
+        if (data.mcpResetAt) {
           mcpPart += ` (${formatTimeRemaining(new Date(data.mcpResetAt), t)})`;
         }
         parts.push(mcpPart);
@@ -2807,16 +2707,8 @@ var tokenBreakdownWidget = {
       cacheReadTokens: cache_read_input_tokens
     };
   },
-  render(data, ctx) {
+  render(data, _ctx) {
     const theme = getTheme();
-    if (ctx.compact) {
-      const parts2 = [];
-      if (data.inputTokens > 0)
-        parts2.push(`I:${formatTokens(data.inputTokens)}`);
-      if (data.outputTokens > 0)
-        parts2.push(`O:${formatTokens(data.outputTokens)}`);
-      return `\u{1F4CA} ${parts2.join(" ")}`;
-    }
     const parts = [];
     if (data.inputTokens > 0)
       parts.push(`${colorize("In", theme.info)} ${formatTokens(data.inputTokens)}`);
@@ -2870,9 +2762,6 @@ var performanceWidget = {
       badge = "\u{1F534}";
       color = theme.danger;
     }
-    if (ctx.compact) {
-      return `${badge} ${colorize(`${data.score}`, color)}`;
-    }
     return `${badge} ${colorize(`${data.score}%`, color)}`;
   }
 };
@@ -2907,9 +2796,6 @@ var forecastWidget = {
       hourlyColor = theme.warning;
     } else {
       hourlyColor = theme.safe;
-    }
-    if (ctx.compact) {
-      return `\u{1F4C8} ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
     }
     return `\u{1F4C8} ${colorize(`${formatCost(data.currentCost)}`, theme.accent)} \u2192 ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
   }
@@ -2996,9 +2882,6 @@ var budgetWidget = {
       color = theme.safe;
       icon = "\u{1F4B5}";
     }
-    if (ctx.compact) {
-      return `${icon} ${colorize(`${formatCost(data.dailyTotal)}/${formatCost(data.dailyBudget)}`, color)}`;
-    }
     return `${icon} ${colorize(`${formatCost(data.dailyTotal)}`, color)} / ${colorize(formatCost(data.dailyBudget), theme.secondary)} ${colorize(`(${percent}%)`, color)}`;
   }
 };
@@ -3043,93 +2926,41 @@ function getLines(config) {
   const disabledSet = new Set(disabled);
   return lines.map((line) => line.filter((id) => !disabledSet.has(id))).filter((line) => line.length > 0);
 }
-function getTerminalWidth() {
-  return process.stdout.columns || process.stderr.columns || parseInt(process.env.COLUMNS || "", 10) || 120;
-}
-async function collectWidgetData(widgetId, ctx) {
+async function renderWidget(widgetId, ctx) {
   const widget = getWidget(widgetId);
-  if (!widget)
+  if (!widget) {
     return null;
+  }
   try {
     const data = await widget.getData(ctx);
-    if (!data)
+    if (!data) {
       return null;
-    return { widget, data };
+    }
+    const output = widget.render(data, ctx);
+    return { id: widgetId, output };
   } catch (error) {
-    debugLog("widget", `Widget '${widgetId}' getData failed`, error);
+    debugLog("widget", `Widget '${widgetId}' failed`, error);
     return null;
   }
 }
-var COMPACT_THRESHOLD = 0.5;
-var MIN_EFFECTIVE_WIDTH = 40;
-function getEffectiveWidth(config) {
-  const termWidth = getTerminalWidth();
-  const outerPadding = 4;
-  const rightReserve = config.rightReserve ?? 25;
-  return Math.max(MIN_EFFECTIVE_WIDTH, termWidth - outerPadding - rightReserve);
-}
-function renderWidget(widget, data, ctx, effectiveWidth) {
-  try {
-    const normal = widget.render(data, ctx);
-    const normalWidth = getVisualWidth(normal);
-    if (normalWidth <= effectiveWidth * COMPACT_THRESHOLD) {
-      return { rendered: normal, width: normalWidth };
-    }
-    const compact = widget.render(data, { ...ctx, compact: true });
-    const compactWidth = getVisualWidth(compact);
-    if (compactWidth > effectiveWidth) {
-      const truncated = truncateToWidth(compact, effectiveWidth);
-      return { rendered: truncated, width: getVisualWidth(truncated) };
-    }
-    return { rendered: compact, width: compactWidth };
-  } catch (error) {
-    debugLog("widget", `Widget '${widget.id}' render failed`, error);
-    return { rendered: "", width: 0 };
-  }
-}
-async function renderLineWithWrap(widgetIds, ctx, effectiveWidth) {
-  const collected = await Promise.all(
-    widgetIds.map((id) => collectWidgetData(id, ctx))
+async function renderLine(widgetIds, ctx) {
+  const results = await Promise.all(
+    widgetIds.map((id) => renderWidget(id, ctx))
   );
-  const valid = collected.filter(
-    (w) => w !== null
-  );
-  if (valid.length === 0)
-    return [];
   const separator = getSeparator();
-  const sepWidth = getVisualWidth(separator);
-  const resultLines = [];
-  let currentRendered = [];
-  let currentWidth = 0;
-  for (const item of valid) {
-    const { rendered, width: widgetWidth } = renderWidget(item.widget, item.data, ctx, effectiveWidth);
-    if (rendered === "")
-      continue;
-    const needsSeparator = currentRendered.length > 0;
-    const addedWidth = needsSeparator ? sepWidth + widgetWidth : widgetWidth;
-    if (needsSeparator && currentWidth + addedWidth > effectiveWidth) {
-      resultLines.push(currentRendered.join(separator));
-      currentRendered = [rendered];
-      currentWidth = widgetWidth;
-    } else {
-      currentRendered.push(rendered);
-      currentWidth += addedWidth;
-    }
-  }
-  if (currentRendered.length > 0) {
-    resultLines.push(currentRendered.join(separator));
-  }
-  return resultLines;
+  const outputs = results.filter((r) => r !== null && r.output.length > 0).map((r) => r.output);
+  return outputs.join(separator);
 }
 async function renderAllLines(ctx) {
-  const configLines = getLines(ctx.config);
-  const effectiveWidth = getEffectiveWidth(ctx.config);
-  const allLines = [];
-  for (const lineWidgets of configLines) {
-    const wrapped = await renderLineWithWrap(lineWidgets, ctx, effectiveWidth);
-    allLines.push(...wrapped);
+  const lines = getLines(ctx.config);
+  const renderedLines = [];
+  for (const lineWidgets of lines) {
+    const rendered = await renderLine(lineWidgets, ctx);
+    if (rendered.length > 0) {
+      renderedLines.push(rendered);
+    }
   }
-  return allLines.filter((line) => line.length > 0);
+  return renderedLines;
 }
 async function formatOutput(ctx) {
   const lines = await renderAllLines(ctx);
