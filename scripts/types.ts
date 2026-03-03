@@ -120,8 +120,6 @@ export interface Config {
    * When set, overrides displayMode with 'custom' and generates lines from the string.
    */
   preset?: string;
-  /** Reserved width for right-side content (Claude Code notifications). Default: 25 */
-  rightReserve?: number;
   /** Daily budget limit in USD. Enables budget tracking widget. */
   dailyBudget?: number;
   cache: {
@@ -278,8 +276,6 @@ export interface WidgetContext {
   translations: Translations;
   /** Cached API rate limits */
   rateLimits?: UsageLimits | null;
-  /** Compact rendering mode (auto-set when terminal is narrow) */
-  compact?: boolean;
 }
 
 /**
