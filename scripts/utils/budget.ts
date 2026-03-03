@@ -53,7 +53,13 @@ async function loadBudgetState(): Promise<BudgetState> {
     const content = await readFile(BUDGET_FILE, 'utf-8');
     const state = JSON.parse(content) as BudgetState;
 
-    if (state.date !== today) return fresh;
+    if (
+      state.date !== today ||
+      !Number.isFinite(state.dailyTotal) ||
+      !state.sessions || typeof state.sessions !== 'object'
+    ) {
+      return fresh;
+    }
 
     budgetCache = state;
     return state;

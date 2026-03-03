@@ -2820,8 +2820,9 @@ async function loadBudgetState() {
   try {
     const content = await readFile7(BUDGET_FILE, "utf-8");
     const state = JSON.parse(content);
-    if (state.date !== today)
+    if (state.date !== today || !Number.isFinite(state.dailyTotal) || !state.sessions || typeof state.sessions !== "object") {
       return fresh;
+    }
     budgetCache = state;
     return state;
   } catch {
