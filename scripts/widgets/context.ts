@@ -8,7 +8,6 @@ import { getColorForPercent, colorize, getSeparator } from '../utils/colors.js';
 import { formatTokens, calculatePercent } from '../utils/formatters.js';
 import { renderProgressBar, DEFAULT_PROGRESS_BAR_CONFIG } from '../utils/progress-bar.js';
 
-
 export const contextWidget: Widget<ContextData> = {
   id: 'context',
   name: 'Context',

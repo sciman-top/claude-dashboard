@@ -8,7 +8,6 @@ import type { Widget } from './base.js';
 import type { WidgetContext, ProjectInfoData } from '../types.js';
 import { colorize, getTheme } from '../utils/colors.js';
 
-
 /**
  * Run git command asynchronously with timeout
  */

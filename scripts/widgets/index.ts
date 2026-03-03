@@ -151,16 +151,8 @@ async function renderLine(
  */
 export async function renderAllLines(ctx: WidgetContext): Promise<string[]> {
   const lines = getLines(ctx.config);
-  const renderedLines: string[] = [];
-
-  for (const lineWidgets of lines) {
-    const rendered = await renderLine(lineWidgets, ctx);
-    if (rendered.length > 0) {
-      renderedLines.push(rendered);
-    }
-  }
-
-  return renderedLines;
+  const rendered = await Promise.all(lines.map((lineWidgets) => renderLine(lineWidgets, ctx)));
+  return rendered.filter((line) => line.length > 0);
 }
 
 /**
