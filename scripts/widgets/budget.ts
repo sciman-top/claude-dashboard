@@ -30,7 +30,7 @@ export const budgetWidget: Widget<BudgetData> = {
     };
   },
 
-  render(data: BudgetData, ctx: WidgetContext): string {
+  render(data: BudgetData, _ctx: WidgetContext): string {
     const theme = getTheme();
     const percent = Math.round(data.utilization * 100);
 

@@ -31,7 +31,7 @@ export const forecastWidget: Widget<ForecastData> = {
     };
   },
 
-  render(data: ForecastData, ctx: WidgetContext): string {
+  render(data: ForecastData, _ctx: WidgetContext): string {
     const theme = getTheme();
 
     let hourlyColor: string;

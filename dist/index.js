@@ -2787,7 +2787,7 @@ var forecastWidget = {
       costPerMinute
     };
   },
-  render(data, ctx) {
+  render(data, _ctx) {
     const theme = getTheme();
     let hourlyColor;
     if (data.hourlyCost > 10) {
@@ -2868,7 +2868,7 @@ var budgetWidget = {
       utilization: Math.min(1, dailyTotal / dailyBudget)
     };
   },
-  render(data, ctx) {
+  render(data, _ctx) {
     const theme = getTheme();
     const percent = Math.round(data.utilization * 100);
     let color;
