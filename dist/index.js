@@ -2748,7 +2748,7 @@ var performanceWidget = {
       outputRatio: Math.round(outputRatio)
     };
   },
-  render(data, ctx) {
+  render(data, _ctx) {
     const theme = getTheme();
     let badge;
     let color;

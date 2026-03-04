@@ -46,7 +46,7 @@ export const performanceWidget: Widget<PerformanceData> = {
     };
   },
 
-  render(data: PerformanceData, ctx: WidgetContext): string {
+  render(data: PerformanceData, _ctx: WidgetContext): string {
     const theme = getTheme();
     let badge: string;
     let color: string;
