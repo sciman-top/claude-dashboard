@@ -1,3 +1,9 @@
+/**
+ * OAuth API client with three-tier caching
+ * @handbook 4.1-three-tier-cache
+ * @handbook 4.2-request-deduplication
+ * @handbook 4.3-429-retry
+ */
 import { readFile, writeFile, mkdir, readdir, stat, unlink } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -5,11 +11,14 @@ import type { UsageLimits, CacheEntry } from '../types.js';
 import { getCredentials } from './credentials.js';
 import { hashToken } from './hash.js';
 import { VERSION } from '../version.js';
+import { debugLog } from './debug.js';
 
 const API_TIMEOUT_MS = 5000;
+const MAX_RETRY_AFTER_MS = 3000;
+const STALE_CACHE_TTL_MULTIPLIER = 10;
 const CACHE_DIR = path.join(os.homedir(), '.cache', 'claude-dashboard');
-const CACHE_MAX_AGE_SECONDS = 3600; // 1 hour - cleanup files older than this
-const CLEANUP_INTERVAL_MS = 3600000; // 1 hour - minimum interval between cleanups
+const CACHE_MAX_AGE_SECONDS = 3600;
+const CLEANUP_INTERVAL_MS = 3600000;
 
 /**
  * In-memory cache Map: tokenHash -> CacheEntry
@@ -63,10 +72,10 @@ function isCacheValid(tokenHash: string, ttlSeconds: number): boolean {
 /**
  * Fetch usage limits from Anthropic API
  *
- * @param ttlSeconds - Cache TTL in seconds (default: 60)
+ * @param ttlSeconds - Cache TTL in seconds (default: 300)
  * @returns Usage limits or null if failed
  */
-export async function fetchUsageLimits(ttlSeconds: number = 60): Promise<UsageLimits | null> {
+export async function fetchUsageLimits(ttlSeconds: number = 300): Promise<UsageLimits | null> {
   // Get token first to determine cache key
   const token = await getCredentials();
 
@@ -76,7 +85,7 @@ export async function fetchUsageLimits(ttlSeconds: number = 60): Promise<UsageLi
       const cached = usageCacheMap.get(lastTokenHash);
       if (cached) return cached.data;
 
-      const fileCache = await loadFileCache(lastTokenHash, ttlSeconds * 10); // Extended TTL for fallback
+      const fileCache = await loadFileCache(lastTokenHash, ttlSeconds * STALE_CACHE_TTL_MULTIPLIER);
       if (fileCache) return fileCache;
     }
     return null;
@@ -109,21 +118,31 @@ export async function fetchUsageLimits(ttlSeconds: number = 60): Promise<UsageLi
   pendingRequests.set(tokenHash, requestPromise);
 
   try {
-    return await requestPromise;
+    const result = await requestPromise;
+    if (result) return result;
+
+    // API failed - fall back to stale cache
+    const staleMemory = usageCacheMap.get(tokenHash);
+    if (staleMemory) return staleMemory.data;
+
+    const staleFile = await loadFileCache(tokenHash, ttlSeconds * STALE_CACHE_TTL_MULTIPLIER);
+    if (staleFile) return staleFile;
+
+    return null;
   } finally {
     pendingRequests.delete(tokenHash);
   }
 }
 
 /**
- * Internal function to fetch from API
+ * Make a single API request
  */
-async function fetchFromApi(token: string, tokenHash: string): Promise<UsageLimits | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+async function makeRequest(token: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
-    const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
+  try {
+    return await fetch('https://api.anthropic.com/api/oauth/usage', {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -134,8 +153,34 @@ async function fetchFromApi(token: string, tokenHash: string): Promise<UsageLimi
       },
       signal: controller.signal,
     });
-
+  } finally {
     clearTimeout(timeout);
+  }
+}
+
+/**
+ * Internal function to fetch from API with single retry on 429
+ */
+async function fetchFromApi(token: string, tokenHash: string): Promise<UsageLimits | null> {
+  try {
+    let response = await makeRequest(token);
+
+    // Retry once on 429 if retry-after is short enough
+    if (response.status === 429) {
+      const retryAfterHeader = response.headers.get('retry-after');
+      if (retryAfterHeader === null) {
+        debugLog('api', '429 received, no retry-after header, skipping');
+      } else {
+        const retryAfter = parseInt(retryAfterHeader, 10);
+        if (!isNaN(retryAfter) && retryAfter * 1000 <= MAX_RETRY_AFTER_MS) {
+          debugLog('api', `429 received, retrying after ${retryAfter}s`);
+          await new Promise((r) => setTimeout(r, retryAfter * 1000));
+          response = await makeRequest(token);
+        } else {
+          debugLog('api', `429 received, retry-after ${retryAfter}s exceeds limit, skipping`);
+        }
+      }
+    }
 
     if (!response.ok) {
       return null;
@@ -154,7 +199,8 @@ async function fetchFromApi(token: string, tokenHash: string): Promise<UsageLimi
     await saveFileCache(tokenHash, limits);
 
     return limits;
-  } catch {
+  } catch (error) {
+    debugLog('api', 'Request failed', error);
     return null;
   }
 }

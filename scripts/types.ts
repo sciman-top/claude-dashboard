@@ -1,4 +1,10 @@
 /**
+ * Core type definitions and display presets
+ * @handbook 2.1-naming-conventions
+ * @handbook 3.5-display-mode-presets
+ */
+
+/**
  * Stdin JSON input from Claude Code
  */
 export interface StdinInput {
@@ -182,7 +188,7 @@ export const DEFAULT_CONFIG: Config = {
   plan: 'max',
   displayMode: 'compact',
   cache: {
-    ttlSeconds: 60,
+    ttlSeconds: 300,
   },
 };
 

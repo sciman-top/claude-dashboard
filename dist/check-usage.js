@@ -66,10 +66,26 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.16.0";
+var VERSION = "1.16.1";
+
+// scripts/utils/debug.ts
+var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
+function debugLog(context, message, error) {
+  if (!DEBUG)
+    return;
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+  const prefix = `[claude-dashboard:${context}]`;
+  if (error) {
+    console.error(`${timestamp} ${prefix} ${message}`, error);
+  } else {
+    console.log(`${timestamp} ${prefix} ${message}`);
+  }
+}
 
 // scripts/utils/api-client.ts
 var API_TIMEOUT_MS = 5e3;
+var MAX_RETRY_AFTER_MS = 3e3;
+var STALE_CACHE_TTL_MULTIPLIER = 10;
 var CACHE_DIR = path.join(os.homedir(), ".cache", "claude-dashboard");
 var CACHE_MAX_AGE_SECONDS = 3600;
 var CLEANUP_INTERVAL_MS = 36e5;
@@ -93,14 +109,14 @@ function isCacheValid(tokenHash, ttlSeconds) {
   const ageSeconds = (Date.now() - cache.timestamp) / 1e3;
   return ageSeconds < ttlSeconds;
 }
-async function fetchUsageLimits(ttlSeconds = 60) {
+async function fetchUsageLimits(ttlSeconds = 300) {
   const token = await getCredentials();
   if (!token) {
     if (lastTokenHash) {
       const cached = usageCacheMap.get(lastTokenHash);
       if (cached)
         return cached.data;
-      const fileCache2 = await loadFileCache(lastTokenHash, ttlSeconds * 10);
+      const fileCache2 = await loadFileCache(lastTokenHash, ttlSeconds * STALE_CACHE_TTL_MULTIPLIER);
       if (fileCache2)
         return fileCache2;
     }
@@ -125,16 +141,25 @@ async function fetchUsageLimits(ttlSeconds = 60) {
   const requestPromise = fetchFromApi(token, tokenHash);
   pendingRequests.set(tokenHash, requestPromise);
   try {
-    return await requestPromise;
+    const result = await requestPromise;
+    if (result)
+      return result;
+    const staleMemory = usageCacheMap.get(tokenHash);
+    if (staleMemory)
+      return staleMemory.data;
+    const staleFile = await loadFileCache(tokenHash, ttlSeconds * STALE_CACHE_TTL_MULTIPLIER);
+    if (staleFile)
+      return staleFile;
+    return null;
   } finally {
     pendingRequests.delete(tokenHash);
   }
 }
-async function fetchFromApi(token, tokenHash) {
+async function makeRequest(token) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-    const response = await fetch("https://api.anthropic.com/api/oauth/usage", {
+    return await fetch("https://api.anthropic.com/api/oauth/usage", {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -145,7 +170,28 @@ async function fetchFromApi(token, tokenHash) {
       },
       signal: controller.signal
     });
+  } finally {
     clearTimeout(timeout);
+  }
+}
+async function fetchFromApi(token, tokenHash) {
+  try {
+    let response = await makeRequest(token);
+    if (response.status === 429) {
+      const retryAfterHeader = response.headers.get("retry-after");
+      if (retryAfterHeader === null) {
+        debugLog("api", "429 received, no retry-after header, skipping");
+      } else {
+        const retryAfter = parseInt(retryAfterHeader, 10);
+        if (!isNaN(retryAfter) && retryAfter * 1e3 <= MAX_RETRY_AFTER_MS) {
+          debugLog("api", `429 received, retrying after ${retryAfter}s`);
+          await new Promise((r) => setTimeout(r, retryAfter * 1e3));
+          response = await makeRequest(token);
+        } else {
+          debugLog("api", `429 received, retry-after ${retryAfter}s exceeds limit, skipping`);
+        }
+      }
+    }
     if (!response.ok) {
       return null;
     }
@@ -158,7 +204,8 @@ async function fetchFromApi(token, tokenHash) {
     usageCacheMap.set(tokenHash, { data: limits, timestamp: Date.now() });
     await saveFileCache(tokenHash, limits);
     return limits;
-  } catch {
+  } catch (error) {
+    debugLog("api", "Request failed", error);
     return null;
   }
 }
@@ -224,22 +271,6 @@ import { readFile as readFile3, stat as stat3, writeFile as writeFile2, mkdir as
 import { execFileSync as execFileSync2 } from "child_process";
 import os2 from "os";
 import path2 from "path";
-
-// scripts/utils/debug.ts
-var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
-function debugLog(context, message, error) {
-  if (!DEBUG)
-    return;
-  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
-  const prefix = `[claude-dashboard:${context}]`;
-  if (error) {
-    console.error(`${timestamp} ${prefix} ${message}`, error);
-  } else {
-    console.log(`${timestamp} ${prefix} ${message}`);
-  }
-}
-
-// scripts/utils/codex-client.ts
 var API_TIMEOUT_MS2 = 5e3;
 var CODEX_AUTH_PATH = path2.join(os2.homedir(), ".codex", "auth.json");
 var CODEX_CONFIG_PATH = path2.join(os2.homedir(), ".codex", "config.toml");
