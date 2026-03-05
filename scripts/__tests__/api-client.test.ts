@@ -143,6 +143,144 @@ describe('api-client', () => {
     });
   });
 
+  describe('429 retry', () => {
+    it('should retry once when retry-after is within limit', async () => {
+      const { getCredentials } = await import('../utils/credentials.js');
+      vi.mocked(getCredentials).mockResolvedValue('retry-test-token');
+      await deleteFileCacheForToken('retry-test-token');
+
+      const mockLimits = {
+        five_hour: { used: 10, limit: 100, remaining: 90, reset_at: '2024-01-01T00:00:00Z' },
+        seven_day: null,
+        seven_day_sonnet: null,
+      };
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Map([['retry-after', '0']]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockLimits),
+        });
+      global.fetch = fetchMock;
+
+      const { fetchUsageLimits, clearCache } = await import('../utils/api-client.js');
+      clearCache();
+
+      const result = await fetchUsageLimits();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result).not.toBeNull();
+      expect(result?.five_hour).not.toBeNull();
+    });
+
+    it('should not retry when retry-after exceeds limit', async () => {
+      const { getCredentials } = await import('../utils/credentials.js');
+      vi.mocked(getCredentials).mockResolvedValue('retry-skip-token');
+      await deleteFileCacheForToken('retry-skip-token');
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Map([['retry-after', '10']]),
+      });
+      global.fetch = fetchMock;
+
+      const { fetchUsageLimits, clearCache } = await import('../utils/api-client.js');
+      clearCache();
+
+      const result = await fetchUsageLimits();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result).toBeNull();
+    });
+
+    it('should not retry when retry-after header is missing', async () => {
+      const { getCredentials } = await import('../utils/credentials.js');
+      vi.mocked(getCredentials).mockResolvedValue('retry-noheader-token');
+      await deleteFileCacheForToken('retry-noheader-token');
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Map(),
+      });
+      global.fetch = fetchMock;
+
+      const { fetchUsageLimits, clearCache } = await import('../utils/api-client.js');
+      clearCache();
+
+      const result = await fetchUsageLimits();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('stale cache fallback', () => {
+    it('should return stale file cache when API fails', async () => {
+      const testToken = 'stale-fallback-token';
+      const tokenHash = hashToken(testToken);
+
+      const { getCredentials } = await import('../utils/credentials.js');
+      vi.mocked(getCredentials).mockResolvedValue(testToken);
+
+      // Write a stale but not too old file cache (within STALE_CACHE_TTL_MULTIPLIER * ttlSeconds)
+      const staleLimits = {
+        five_hour: { used: 30, limit: 100, remaining: 70, reset_at: '2024-01-01T00:00:00Z' },
+        seven_day: null,
+        seven_day_sonnet: null,
+      };
+      await mkdir(ACTUAL_CACHE_DIR, { recursive: true, mode: 0o700 });
+      await writeFile(
+        path.join(ACTUAL_CACHE_DIR, `cache-${tokenHash}.json`),
+        JSON.stringify({
+          data: staleLimits,
+          timestamp: Date.now() - 600_000, // 10 minutes ago (stale for 300s TTL, valid for 3000s stale TTL)
+        }),
+        { mode: 0o600 }
+      );
+
+      // API returns 500
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      const { fetchUsageLimits, clearCache } = await import('../utils/api-client.js');
+      clearCache();
+
+      const result = await fetchUsageLimits();
+
+      expect(result).not.toBeNull();
+      expect(result?.five_hour?.used).toBe(30);
+
+      // Cleanup
+      await deleteFileCacheForToken(testToken);
+    });
+
+    it('should return null when API fails and no stale cache exists', async () => {
+      const { getCredentials } = await import('../utils/credentials.js');
+      vi.mocked(getCredentials).mockResolvedValue('no-cache-fallback-token');
+      await deleteFileCacheForToken('no-cache-fallback-token');
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      const { fetchUsageLimits, clearCache } = await import('../utils/api-client.js');
+      clearCache();
+
+      const result = await fetchUsageLimits();
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('file cache integration', () => {
     const TEST_TOKEN = 'integration-test-token-' + Date.now();
 
