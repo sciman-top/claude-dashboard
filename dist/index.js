@@ -498,7 +498,7 @@ async function fetchUsageLimits(ttlSeconds = 60) {
       const cached = usageCacheMap.get(lastTokenHash);
       if (cached)
         return cached.data;
-      const fileCache2 = await loadFileCache(lastTokenHash, ttlSeconds * 10);
+      const fileCache2 = await loadFileCache(lastTokenHash, ttlSeconds * STALE_CACHE_TTL_MULTIPLIER);
       if (fileCache2)
         return fileCache2;
     }

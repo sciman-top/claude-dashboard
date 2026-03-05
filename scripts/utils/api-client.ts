@@ -1,3 +1,9 @@
+/**
+ * OAuth API client with three-tier caching
+ * @handbook 4.1-three-tier-cache
+ * @handbook 4.2-request-deduplication
+ * @handbook 4.3-429-retry
+ */
 import { readFile, writeFile, mkdir, readdir, stat, unlink } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -7,11 +13,11 @@ import { hashToken } from './hash.js';
 import { VERSION } from '../version.js';
 
 const API_TIMEOUT_MS = 5000;
-const MAX_RETRY_AFTER_MS = 3000; // Only retry if retry-after <= 3 seconds
-const STALE_CACHE_TTL_MULTIPLIER = 10; // Stale cache TTL = normal TTL * 10
+const MAX_RETRY_AFTER_MS = 3000;
+const STALE_CACHE_TTL_MULTIPLIER = 10;
 const CACHE_DIR = path.join(os.homedir(), '.cache', 'claude-dashboard');
-const CACHE_MAX_AGE_SECONDS = 3600; // 1 hour - cleanup files older than this
-const CLEANUP_INTERVAL_MS = 3600000; // 1 hour - minimum interval between cleanups
+const CACHE_MAX_AGE_SECONDS = 3600;
+const CLEANUP_INTERVAL_MS = 3600000;
 
 /**
  * In-memory cache Map: tokenHash -> CacheEntry
@@ -65,7 +71,7 @@ function isCacheValid(tokenHash: string, ttlSeconds: number): boolean {
 /**
  * Fetch usage limits from Anthropic API
  *
- * @param ttlSeconds - Cache TTL in seconds (default: 60)
+ * @param ttlSeconds - Cache TTL in seconds (default: 300)
  * @returns Usage limits or null if failed
  */
 export async function fetchUsageLimits(ttlSeconds: number = 60): Promise<UsageLimits | null> {
@@ -78,7 +84,7 @@ export async function fetchUsageLimits(ttlSeconds: number = 60): Promise<UsageLi
       const cached = usageCacheMap.get(lastTokenHash);
       if (cached) return cached.data;
 
-      const fileCache = await loadFileCache(lastTokenHash, ttlSeconds * 10); // Extended TTL for fallback
+      const fileCache = await loadFileCache(lastTokenHash, ttlSeconds * STALE_CACHE_TTL_MULTIPLIER);
       if (fileCache) return fileCache;
     }
     return null;
