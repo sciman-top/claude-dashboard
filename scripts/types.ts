@@ -6,6 +6,8 @@
 
 /**
  * Stdin JSON input from Claude Code
+ * @handbook 2.1-naming-rules
+ * @handbook 3.5-display-modes-presets
  */
 export interface StdinInput {
   model: {
@@ -514,8 +516,6 @@ export interface ForecastData {
   currentCost: number;
   /** Estimated hourly cost extrapolated from session rate */
   hourlyCost: number;
-  /** Cost per minute */
-  costPerMinute: number;
 }
 
 /**

@@ -1,5 +1,6 @@
 /**
  * Performance badge widget - composite score from cache hit rate + burn rate
+ * @handbook 3.3-widget-data-sources
  */
 
 import type { Widget } from './base.js';
@@ -30,7 +31,7 @@ export const performanceWidget: Widget<PerformanceData> = {
     if (elapsedMinutes === null || elapsedMinutes === 0) return null;
 
     // Cache hit rate (0-100, higher = more cache reuse)
-    const totalInput = usage.cache_read_input_tokens + usage.input_tokens + usage.cache_creation_input_tokens;
+    const totalInput = usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
     const cacheHitRate = totalInput > 0 ? (usage.cache_read_input_tokens / totalInput) * 100 : 0;
 
     // Output ratio (0-100, higher = more productive output per token)

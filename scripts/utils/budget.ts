@@ -6,6 +6,7 @@
  * We store per-session "last seen cost" to compute the delta (new spending since last check),
  * then add that delta to the daily total. This prevents double-counting when the
  * status line runs multiple times per session.
+ * @handbook 3.3-widget-data-sources
  */
 
 import { readFile, mkdir, writeFile } from 'fs/promises';
@@ -29,6 +30,9 @@ interface BudgetState {
  * In-memory cache to avoid repeated file I/O within a single process
  */
 let budgetCache: BudgetState | null = null;
+
+/** Track whether BUDGET_DIR has been created */
+let dirEnsured = false;
 
 /**
  * Get today's date as YYYY-MM-DD
@@ -73,7 +77,10 @@ async function loadBudgetState(): Promise<BudgetState> {
  */
 async function saveBudgetState(state: BudgetState): Promise<void> {
   try {
-    await mkdir(BUDGET_DIR, { recursive: true });
+    if (!dirEnsured) {
+      await mkdir(BUDGET_DIR, { recursive: true });
+      dirEnsured = true;
+    }
     await writeFile(BUDGET_FILE, JSON.stringify(state), 'utf-8');
     budgetCache = state;
   } catch (error) {
@@ -94,6 +101,11 @@ export async function recordCostAndGetDaily(
   sessionCost: number,
 ): Promise<number> {
   const state = await loadBudgetState();
+
+  // Skip zero-cost sessions to prevent unbounded map growth
+  if (sessionCost <= 0 && !(sessionId in state.sessions)) {
+    return state.dailyTotal;
+  }
 
   const lastSeen = state.sessions[sessionId] ?? 0;
   const delta = Math.max(0, sessionCost - lastSeen);

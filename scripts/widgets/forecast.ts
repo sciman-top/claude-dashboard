@@ -1,5 +1,6 @@
 /**
  * Cost forecast widget - estimates hourly cost based on current session rate
+ * @handbook 3.3-widget-data-sources
  */
 
 import type { Widget } from './base.js';
@@ -27,7 +28,6 @@ export const forecastWidget: Widget<ForecastData> = {
     return {
       currentCost: totalCost,
       hourlyCost,
-      costPerMinute,
     };
   },
 
@@ -43,6 +43,6 @@ export const forecastWidget: Widget<ForecastData> = {
       hourlyColor = theme.safe;
     }
 
-    return `📈 ${colorize(`${formatCost(data.currentCost)}`, theme.accent)} → ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
+    return `📈 ${colorize(formatCost(data.currentCost), theme.accent)} → ${colorize(`~${formatCost(data.hourlyCost)}/h`, hourlyColor)}`;
   },
 };

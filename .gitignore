@@ -25,5 +25,10 @@ coverage/
 /tmp/claude-dashboard-cache.json
 claude-dashboard.mov
 
-# Generated documentation (TypeDoc/JSDoc output)
-docs/
+# Private docs
+.private/
+
+# Website
+website/node_modules/
+website/dist/
+website/.astro/
