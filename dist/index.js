@@ -2787,7 +2787,7 @@ var performanceWidget = {
     const elapsedMinutes = await getSessionElapsedMinutes(ctx, 0);
     if (elapsedMinutes === null || elapsedMinutes === 0)
       return null;
-    const totalInput = totalTokens - usage.output_tokens;
+    const totalInput = usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
     const cacheHitRate = totalInput > 0 ? usage.cache_read_input_tokens / totalInput * 100 : 0;
     const outputRatio = usage.output_tokens / totalTokens * 100;
     const score = Math.min(100, Math.max(0, Math.round(cacheHitRate * 0.6 + outputRatio * 0.4)));
