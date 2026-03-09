@@ -259,7 +259,7 @@ describe('api-client', () => {
       const result = await fetchUsageLimits();
 
       expect(result).not.toBeNull();
-      expect(result?.five_hour?.used).toBe(30);
+      expect(result?.five_hour?.utilization).toBe(30);
 
       // Cleanup
       await deleteFileCacheForToken(testToken);
