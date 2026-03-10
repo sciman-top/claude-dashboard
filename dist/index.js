@@ -516,7 +516,7 @@ async function fetchUsageLimits(ttlSeconds = 300) {
   if (!token) {
     if (lastTokenHash) {
       const cached = usageCacheMap.get(lastTokenHash);
-      if (cached)
+      if (cached && !cached.isError)
         return cached.data;
       const fileCache = await loadFileCache(lastTokenHash, STALE_FALLBACK_SECONDS);
       if (fileCache)

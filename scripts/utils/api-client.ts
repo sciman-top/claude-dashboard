@@ -87,7 +87,7 @@ export async function fetchUsageLimits(ttlSeconds: number = 300): Promise<UsageL
   if (!token) {
     if (lastTokenHash) {
       const cached = usageCacheMap.get(lastTokenHash);
-      if (cached) return cached.data;
+      if (cached && !cached.isError) return cached.data;
 
       const fileCache = await loadFileCache(lastTokenHash, STALE_FALLBACK_SECONDS);
       if (fileCache) return fileCache;

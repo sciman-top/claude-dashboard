@@ -323,23 +323,25 @@ describe('api-client', () => {
       });
       global.fetch = fetchMock;
 
-      const { fetchUsageLimits, clearCache } = await import('../utils/api-client.js');
-      clearCache();
+      const { fetchUsageLimits } = await import('../utils/api-client.js');
 
-      // First call - fails
-      await fetchUsageLimits();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-
-      // Advance time past NEGATIVE_CACHE_SECONDS (30s)
+      // Use fake timers so Date.now() advances with vi.advanceTimersByTime
       vi.useFakeTimers();
-      vi.advanceTimersByTime(31_000);
-      vi.useRealTimers();
 
-      // After 30s, negative cache should be expired — API should be called again
-      // Need a fresh module to pick up the time change
-      clearCache();
-      await fetchUsageLimits();
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      try {
+        // First call - fails, sets negative cache
+        await fetchUsageLimits();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        // Advance time past NEGATIVE_CACHE_SECONDS (30s)
+        vi.advanceTimersByTime(31_000);
+
+        // Negative cache should be expired — API should be called again
+        await fetchUsageLimits();
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should return stale file cache on negative cache hit when available', async () => {
