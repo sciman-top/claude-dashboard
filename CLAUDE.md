@@ -165,7 +165,7 @@ const DISPLAY_PRESETS = {
     ['model', 'context', 'cost', 'rateLimit5h', 'rateLimit7d', 'rateLimit7dSonnet', 'zaiUsage'],
     ['projectInfo', 'sessionId', 'sessionDuration', 'burnRate', 'depletionTime', 'todoProgress'],
     ['configCounts', 'toolActivity', 'agentStatus', 'cacheHit', 'performance'],
-    ['tokenBreakdown', 'forecast', 'budget', 'codexUsage', 'geminiUsage'],
+    ['tokenBreakdown', 'forecast', 'budget'],
     ['codexUsage', 'geminiUsage', 'linesChanged', 'outputStyle', 'version'],
   ],
 };

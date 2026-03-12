@@ -1219,6 +1219,26 @@ describe('widgets', () => {
       expect(data?.removed).toBe(0);
     });
 
+    it('should return data when only removed is present', async () => {
+      const ctx = createContext({
+        cost: { total_cost_usd: 0.5, total_lines_removed: 15 },
+      });
+      const data = await linesChangedWidget.getData(ctx);
+
+      expect(data).not.toBeNull();
+      expect(data?.added).toBe(0);
+      expect(data?.removed).toBe(15);
+    });
+
+    it('should render only removed part when added is 0', () => {
+      const ctx = createContext();
+      const data = { added: 0, removed: 15 };
+      const result = linesChangedWidget.render(data, ctx);
+
+      expect(result).toContain('-15');
+      expect(result).not.toContain('+');
+    });
+
     it('should render only added part when removed is 0', () => {
       const ctx = createContext();
       const data = { added: 100, removed: 0 };
