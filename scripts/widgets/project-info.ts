@@ -3,27 +3,11 @@
  * @handbook 3.3-widget-data-sources
  */
 
-import { execFile } from 'child_process';
 import { basename, relative } from 'path';
 import type { Widget } from './base.js';
 import type { WidgetContext, ProjectInfoData } from '../types.js';
 import { colorize, getTheme } from '../utils/colors.js';
-
-/**
- * Run git command asynchronously with timeout
- */
-function execGit(args: string[], cwd: string, timeout: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('git', ['--no-optional-locks', ...args], {
-      cwd,
-      encoding: 'utf-8',
-      timeout,
-    }, (error, stdout) => {
-      if (error) reject(error);
-      else resolve(stdout);
-    });
-  });
-}
+import { execGit } from '../utils/git.js';
 
 /**
  * Get current git branch with timeout

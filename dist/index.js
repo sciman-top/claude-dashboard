@@ -1136,8 +1136,10 @@ var rateLimit7dSonnetWidget = {
 };
 
 // scripts/widgets/project-info.ts
-import { execFile } from "child_process";
 import { basename, relative } from "path";
+
+// scripts/utils/git.ts
+import { execFile } from "child_process";
 function execGit(args, cwd, timeout) {
   return new Promise((resolve, reject) => {
     execFile("git", ["--no-optional-locks", ...args], {
@@ -1152,6 +1154,8 @@ function execGit(args, cwd, timeout) {
     });
   });
 }
+
+// scripts/widgets/project-info.ts
 async function getGitBranch(cwd) {
   try {
     const result = await execGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd, 500);
@@ -3140,15 +3144,35 @@ var versionWidget = {
 };
 
 // scripts/widgets/lines-changed.ts
+var DIFF_CACHE_TTL_MS = 1e4;
+var diffCache = null;
 var linesChangedWidget = {
   id: "linesChanged",
   name: "Lines Changed",
   async getData(ctx) {
-    const added = ctx.stdin.cost?.total_lines_added;
-    const removed = ctx.stdin.cost?.total_lines_removed;
-    if (added == null && removed == null || added === 0 && removed === 0)
+    const cwd = ctx.stdin.workspace?.current_dir;
+    if (!cwd)
       return null;
-    return { added: added ?? 0, removed: removed ?? 0 };
+    if (diffCache?.cwd === cwd && Date.now() - diffCache.timestamp < DIFF_CACHE_TTL_MS) {
+      return diffCache.data;
+    }
+    try {
+      const output = await execGit(["diff", "HEAD", "--shortstat"], cwd, 1e3);
+      if (!output.trim()) {
+        diffCache = { cwd, data: null, timestamp: Date.now() };
+        return null;
+      }
+      const insertMatch = output.match(/(\d+) insertion/);
+      const deleteMatch = output.match(/(\d+) deletion/);
+      const added = insertMatch ? parseInt(insertMatch[1], 10) : 0;
+      const removed = deleteMatch ? parseInt(deleteMatch[1], 10) : 0;
+      const data = added === 0 && removed === 0 ? null : { added, removed };
+      diffCache = { cwd, data, timestamp: Date.now() };
+      return data;
+    } catch {
+      diffCache = { cwd, data: null, timestamp: Date.now() };
+      return null;
+    }
   },
   render(data, _ctx) {
     const theme = getTheme();

@@ -1,21 +1,60 @@
 /**
- * Lines Changed widget - displays lines added/removed as coding productivity metric
+ * Lines Changed widget - displays uncommitted lines added/removed via git diff
  * @handbook 3.3-widget-data-sources
  */
 
 import type { Widget } from './base.js';
 import type { WidgetContext, LinesChangedData } from '../types.js';
 import { colorize, getTheme } from '../utils/colors.js';
+import { execGit } from '../utils/git.js';
+
+/**
+ * Cache TTL for git diff stats (10 seconds)
+ * File changes are infrequent during AI output
+ */
+const DIFF_CACHE_TTL_MS = 10_000;
+
+let diffCache: {
+  cwd: string;
+  data: LinesChangedData | null;
+  timestamp: number;
+} | null = null;
 
 export const linesChangedWidget: Widget<LinesChangedData> = {
   id: 'linesChanged',
   name: 'Lines Changed',
 
   async getData(ctx: WidgetContext): Promise<LinesChangedData | null> {
-    const added = ctx.stdin.cost?.total_lines_added;
-    const removed = ctx.stdin.cost?.total_lines_removed;
-    if ((added == null && removed == null) || (added === 0 && removed === 0)) return null;
-    return { added: added ?? 0, removed: removed ?? 0 };
+    const cwd = ctx.stdin.workspace?.current_dir;
+    if (!cwd) return null;
+
+    // Check TTL-based cache
+    if (
+      diffCache?.cwd === cwd &&
+      Date.now() - diffCache.timestamp < DIFF_CACHE_TTL_MS
+    ) {
+      return diffCache.data;
+    }
+
+    try {
+      const output = await execGit(['diff', 'HEAD', '--shortstat'], cwd, 1000);
+      if (!output.trim()) {
+        diffCache = { cwd, data: null, timestamp: Date.now() };
+        return null;
+      }
+
+      const insertMatch = output.match(/(\d+) insertion/);
+      const deleteMatch = output.match(/(\d+) deletion/);
+      const added = insertMatch ? parseInt(insertMatch[1], 10) : 0;
+      const removed = deleteMatch ? parseInt(deleteMatch[1], 10) : 0;
+
+      const data = (added === 0 && removed === 0) ? null : { added, removed };
+      diffCache = { cwd, data, timestamp: Date.now() };
+      return data;
+    } catch {
+      diffCache = { cwd, data: null, timestamp: Date.now() };
+      return null;
+    }
   },
 
   render(data: LinesChangedData, _ctx: WidgetContext): string {
