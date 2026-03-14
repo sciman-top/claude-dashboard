@@ -103,7 +103,8 @@ export async function recordCostAndGetDaily(
   sessionId: string,
   sessionCost: number,
 ): Promise<number> {
-  // Deduplicate concurrent calls (budget + todayCost widgets render in same Promise.all)
+  // Deduplicate concurrent calls (budget + todayCost widgets render in same Promise.all).
+  // Assumes all concurrent callers in a single render cycle pass the same sessionId/sessionCost.
   if (pendingRecordDaily) return pendingRecordDaily;
   pendingRecordDaily = recordCostAndGetDailyImpl(sessionId, sessionCost);
   try {

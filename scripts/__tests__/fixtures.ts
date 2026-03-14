@@ -28,8 +28,6 @@ export const MOCK_TRANSLATIONS: Translations = {
     budget: 'Budget',
     performance: 'Perf',
     tokenBreakdown: 'Tokens',
-    tokenSpeed: 'Speed',
-    sessionName: 'Session',
     todayCost: 'Today',
   },
   checkUsage: {

@@ -275,8 +275,6 @@ export interface Translations {
     budget: string;
     performance: string;
     tokenBreakdown: string;
-    tokenSpeed: string;
-    sessionName: string;
     todayCost: string;
   };
   /** Check-usage command labels */

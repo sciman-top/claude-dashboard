@@ -737,8 +737,6 @@ var en_default = {
     budget: "Budget",
     performance: "Perf",
     tokenBreakdown: "Tokens",
-    tokenSpeed: "Speed",
-    sessionName: "Session",
     todayCost: "Today"
   },
   checkUsage: {
@@ -793,8 +791,6 @@ var ko_default = {
     budget: "\uC608\uC0B0",
     performance: "\uC131\uB2A5",
     tokenBreakdown: "\uD1A0\uD070",
-    tokenSpeed: "\uC18D\uB3C4",
-    sessionName: "\uC138\uC158\uBA85",
     todayCost: "\uC624\uB298"
   },
   checkUsage: {
