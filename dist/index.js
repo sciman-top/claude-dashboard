@@ -1136,8 +1136,10 @@ var rateLimit7dSonnetWidget = {
 };
 
 // scripts/widgets/project-info.ts
-import { execFile } from "child_process";
 import { basename, relative } from "path";
+
+// scripts/utils/git.ts
+import { execFile } from "child_process";
 function execGit(args, cwd, timeout) {
   return new Promise((resolve, reject) => {
     execFile("git", ["--no-optional-locks", ...args], {
@@ -1152,6 +1154,8 @@ function execGit(args, cwd, timeout) {
     });
   });
 }
+
+// scripts/widgets/project-info.ts
 async function getGitBranch(cwd) {
   try {
     const result = await execGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd, 500);
@@ -3140,21 +3144,8 @@ var versionWidget = {
 };
 
 // scripts/widgets/lines-changed.ts
-import { execFile as execFile2 } from "child_process";
-function execGit2(args, cwd, timeout) {
-  return new Promise((resolve, reject) => {
-    execFile2("git", ["--no-optional-locks", ...args], {
-      cwd,
-      encoding: "utf-8",
-      timeout
-    }, (error, stdout) => {
-      if (error)
-        reject(error);
-      else
-        resolve(stdout);
-    });
-  });
-}
+var DIFF_CACHE_TTL_MS = 1e4;
+var diffCache = null;
 var linesChangedWidget = {
   id: "linesChanged",
   name: "Lines Changed",
@@ -3162,18 +3153,24 @@ var linesChangedWidget = {
     const cwd = ctx.stdin.workspace?.current_dir;
     if (!cwd)
       return null;
+    if (diffCache?.cwd === cwd && Date.now() - diffCache.timestamp < DIFF_CACHE_TTL_MS) {
+      return diffCache.data;
+    }
     try {
-      const output = await execGit2(["diff", "HEAD", "--shortstat"], cwd, 1e3);
-      if (!output.trim())
+      const output = await execGit(["diff", "HEAD", "--shortstat"], cwd, 1e3);
+      if (!output.trim()) {
+        diffCache = { cwd, data: null, timestamp: Date.now() };
         return null;
+      }
       const insertMatch = output.match(/(\d+) insertion/);
       const deleteMatch = output.match(/(\d+) deletion/);
       const added = insertMatch ? parseInt(insertMatch[1], 10) : 0;
       const removed = deleteMatch ? parseInt(deleteMatch[1], 10) : 0;
-      if (added === 0 && removed === 0)
-        return null;
-      return { added, removed };
+      const data = added === 0 && removed === 0 ? null : { added, removed };
+      diffCache = { cwd, data, timestamp: Date.now() };
+      return data;
     } catch {
+      diffCache = { cwd, data: null, timestamp: Date.now() };
       return null;
     }
   },

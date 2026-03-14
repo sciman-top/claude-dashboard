@@ -3,26 +3,22 @@
  * @handbook 3.3-widget-data-sources
  */
 
-import { execFile } from 'child_process';
 import type { Widget } from './base.js';
 import type { WidgetContext, LinesChangedData } from '../types.js';
 import { colorize, getTheme } from '../utils/colors.js';
+import { execGit } from '../utils/git.js';
 
 /**
- * Run git command asynchronously with timeout
+ * Cache TTL for git diff stats (10 seconds)
+ * File changes are infrequent during AI output
  */
-function execGit(args: string[], cwd: string, timeout: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('git', ['--no-optional-locks', ...args], {
-      cwd,
-      encoding: 'utf-8',
-      timeout,
-    }, (error, stdout) => {
-      if (error) reject(error);
-      else resolve(stdout);
-    });
-  });
-}
+const DIFF_CACHE_TTL_MS = 10_000;
+
+let diffCache: {
+  cwd: string;
+  data: LinesChangedData | null;
+  timestamp: number;
+} | null = null;
 
 export const linesChangedWidget: Widget<LinesChangedData> = {
   id: 'linesChanged',
@@ -32,19 +28,31 @@ export const linesChangedWidget: Widget<LinesChangedData> = {
     const cwd = ctx.stdin.workspace?.current_dir;
     if (!cwd) return null;
 
+    // Check TTL-based cache
+    if (
+      diffCache?.cwd === cwd &&
+      Date.now() - diffCache.timestamp < DIFF_CACHE_TTL_MS
+    ) {
+      return diffCache.data;
+    }
+
     try {
       const output = await execGit(['diff', 'HEAD', '--shortstat'], cwd, 1000);
-      if (!output.trim()) return null;
+      if (!output.trim()) {
+        diffCache = { cwd, data: null, timestamp: Date.now() };
+        return null;
+      }
 
       const insertMatch = output.match(/(\d+) insertion/);
       const deleteMatch = output.match(/(\d+) deletion/);
       const added = insertMatch ? parseInt(insertMatch[1], 10) : 0;
       const removed = deleteMatch ? parseInt(deleteMatch[1], 10) : 0;
 
-      if (added === 0 && removed === 0) return null;
-
-      return { added, removed };
+      const data = (added === 0 && removed === 0) ? null : { added, removed };
+      diffCache = { cwd, data, timestamp: Date.now() };
+      return data;
     } catch {
+      diffCache = { cwd, data: null, timestamp: Date.now() };
       return null;
     }
   },
