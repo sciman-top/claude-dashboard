@@ -50,6 +50,11 @@ function processEntries(
       existing.sessionStartTime = new Date(entry.timestamp).getTime();
     }
 
+    // Extract session name from /rename command
+    if (entry.customTitle) {
+      existing.sessionName = entry.customTitle;
+    }
+
     // Extract tool_use blocks
     if (entry.type === 'assistant' && entry.message?.content) {
       for (const block of entry.message.content) {

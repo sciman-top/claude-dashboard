@@ -37,7 +37,8 @@
     "forecast": "Forecast",
     "budget": "Budget",
     "performance": "Perf",
-    "tokenBreakdown": "Tokens"
+    "tokenBreakdown": "Tokens",
+    "todayCost": "Today"
   },
   "checkUsage": {
     "title": "CLI Usage Dashboard",
