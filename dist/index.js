@@ -3,7 +3,7 @@
 // scripts/statusline.ts
 import { readFile as readFile8, stat as stat8 } from "fs/promises";
 import { join as join6 } from "path";
-import { homedir as homedir5 } from "os";
+import { homedir as homedir6 } from "os";
 
 // scripts/types.ts
 var DISPLAY_PRESETS = {
@@ -1565,6 +1565,7 @@ var sessionDurationWidget = {
 // scripts/utils/transcript-parser.ts
 import { open as open2, stat as stat5 } from "fs/promises";
 import { basename as basename2 } from "path";
+import { homedir as homedir4 } from "os";
 var cachedTranscript = null;
 function parseJsonlContent(content) {
   const entries = [];
@@ -1771,19 +1772,35 @@ function extractTaskProgress(transcript) {
 function extractTodoOrTaskProgress(transcript) {
   return extractTaskProgress(transcript) ?? extractTodoProgress(transcript);
 }
-function getLastUserPrompt(transcript) {
-  for (let i = transcript.entries.length - 1; i >= 0; i--) {
-    const entry = transcript.entries[i];
-    if (entry.type === "user" && entry.message?.content) {
-      for (const block of entry.message.content) {
-        if (block.type === "text" && typeof block.text === "string" && block.text.trim() && entry.timestamp) {
-          return {
-            text: block.text.replace(/\s+/g, " ").trim(),
-            timestamp: entry.timestamp
-          };
+async function getLastUserPrompt(sessionId) {
+  const historyPath = `${homedir4()}/.claude/history.jsonl`;
+  const CHUNK = 16 * 1024;
+  try {
+    const fileStat = await stat5(historyPath);
+    const size = Math.min(CHUNK, fileStat.size);
+    const fd = await open2(historyPath, "r");
+    try {
+      const buffer = Buffer.alloc(size);
+      await fd.read(buffer, 0, size, fileStat.size - size);
+      const lines = buffer.toString("utf-8").split("\n");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i])
+          continue;
+        try {
+          const entry = JSON.parse(lines[i]);
+          if (entry.sessionId === sessionId && entry.display?.trim() && entry.timestamp) {
+            return {
+              text: entry.display.replace(/\s+/g, " ").trim(),
+              timestamp: entry.timestamp
+            };
+          }
+        } catch {
         }
       }
+    } finally {
+      await fd.close();
     }
+  } catch {
   }
   return null;
 }
@@ -3123,8 +3140,8 @@ var forecastWidget = {
 // scripts/utils/budget.ts
 import { readFile as readFile7, mkdir as mkdir4, writeFile as writeFile4 } from "fs/promises";
 import { join as join5 } from "path";
-import { homedir as homedir4 } from "os";
-var BUDGET_DIR = join5(homedir4(), ".cache", "claude-dashboard");
+import { homedir as homedir5 } from "os";
+var BUDGET_DIR = join5(homedir5(), ".cache", "claude-dashboard");
 var BUDGET_FILE = join5(BUDGET_DIR, "budget.json");
 var budgetCache = null;
 var dirEnsured = false;
@@ -3356,13 +3373,10 @@ var lastPromptWidget = {
   id: "lastPrompt",
   name: "Last Prompt",
   async getData(ctx) {
-    const transcriptPath = ctx.stdin.transcript_path;
-    if (!transcriptPath)
+    const sessionId = ctx.stdin.session_id;
+    if (!sessionId)
       return null;
-    const transcript = await parseTranscript(transcriptPath);
-    if (!transcript)
-      return null;
-    return getLastUserPrompt(transcript);
+    return getLastUserPrompt(sessionId);
   },
   render(data, _ctx) {
     const theme = getTheme();
@@ -3454,7 +3468,7 @@ async function formatOutput(ctx) {
 }
 
 // scripts/statusline.ts
-var CONFIG_PATH = join6(homedir5(), ".claude", "claude-dashboard.local.json");
+var CONFIG_PATH = join6(homedir6(), ".claude", "claude-dashboard.local.json");
 var configCache = null;
 async function readStdin() {
   try {

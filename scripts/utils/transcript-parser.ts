@@ -6,6 +6,7 @@
 
 import { open, stat } from 'fs/promises';
 import { basename } from 'path';
+import { homedir } from 'os';
 import type { TranscriptEntry, ParsedTranscript, TodoProgressData, LastPromptData } from '../types.js';
 import { truncate } from './formatters.js';
 
@@ -329,25 +330,47 @@ export function extractTodoOrTaskProgress(
 }
 
 /**
- * Get the last user prompt from transcript entries.
- * Iterates in reverse to find the most recent user message with text content.
+ * Get the last user prompt from ~/.claude/history.jsonl.
+ * Uses history.jsonl instead of transcript because transcript includes
+ * skill/command expansions as user messages, while history.jsonl only
+ * contains actual user input via the `display` field.
  */
-export function getLastUserPrompt(
-  transcript: ParsedTranscript
-): LastPromptData | null {
-  for (let i = transcript.entries.length - 1; i >= 0; i--) {
-    const entry = transcript.entries[i];
-    if (entry.type === 'user' && entry.message?.content) {
-      for (const block of entry.message.content) {
-        if (block.type === 'text' && typeof block.text === 'string' && block.text.trim() && entry.timestamp) {
-          return {
-            text: block.text.replace(/\s+/g, ' ').trim(),
-            timestamp: entry.timestamp,
+export async function getLastUserPrompt(
+  sessionId: string
+): Promise<LastPromptData | null> {
+  const historyPath = `${homedir()}/.claude/history.jsonl`;
+  const CHUNK = 16 * 1024;
+
+  try {
+    const fileStat = await stat(historyPath);
+    const size = Math.min(CHUNK, fileStat.size);
+    const fd = await open(historyPath, 'r');
+    try {
+      const buffer = Buffer.alloc(size);
+      await fd.read(buffer, 0, size, fileStat.size - size);
+      const lines = buffer.toString('utf-8').split('\n');
+
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i]) continue;
+        try {
+          const entry = JSON.parse(lines[i]) as {
+            sessionId?: string;
+            display?: string;
+            timestamp?: string;
           };
-        }
+          if (entry.sessionId === sessionId && entry.display?.trim() && entry.timestamp) {
+            return {
+              text: entry.display.replace(/\s+/g, ' ').trim(),
+              timestamp: entry.timestamp,
+            };
+          }
+        } catch { /* skip malformed lines */ }
       }
+    } finally {
+      await fd.close();
     }
-  }
+  } catch { /* file not found or read error */ }
+
   return null;
 }
 
