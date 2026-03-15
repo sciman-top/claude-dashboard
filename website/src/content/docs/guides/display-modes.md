@@ -54,7 +54,7 @@ Shows all available widgets across six lines, including analytics, tool activity
 CLAUDE.md: 2 │ ⚙️ Read(app.ts) (12 done) │ 🤖 Agent: 1 │ 📦 85% │ 🟢 72%
 📊 In 30K · Out 8K │ 📈 ~$8/h │ 💵 $5/$15 │ 💰 Today: $4.83
 🔷 codex │ 💎 gemini │ +156 -23 │ concise │ v1.0.80
-▸ 14:32 Fix the authentication bug in middleware
+💬 14:32 Fix the authentication bug in middleware
 ```
 
 ```

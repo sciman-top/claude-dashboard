@@ -1518,8 +1518,7 @@ var en_default = {
     budget: "Budget",
     performance: "Perf",
     tokenBreakdown: "Tokens",
-    todayCost: "Today",
-    lastPrompt: "Last Prompt"
+    todayCost: "Today"
   },
   checkUsage: {
     title: "CLI Usage Dashboard",
@@ -1573,8 +1572,7 @@ var ko_default = {
     budget: "\uC608\uC0B0",
     performance: "\uC131\uB2A5",
     tokenBreakdown: "\uD1A0\uD070",
-    todayCost: "\uC624\uB298",
-    lastPrompt: "\uB9C8\uC9C0\uB9C9 \uD504\uB86C\uD504\uD2B8"
+    todayCost: "\uC624\uB298"
   },
   checkUsage: {
     title: "CLI \uC0AC\uC6A9\uB7C9 \uB300\uC2DC\uBCF4\uB4DC",

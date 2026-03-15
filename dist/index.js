@@ -794,8 +794,7 @@ var en_default = {
     budget: "Budget",
     performance: "Perf",
     tokenBreakdown: "Tokens",
-    todayCost: "Today",
-    lastPrompt: "Last Prompt"
+    todayCost: "Today"
   },
   checkUsage: {
     title: "CLI Usage Dashboard",
@@ -849,8 +848,7 @@ var ko_default = {
     budget: "\uC608\uC0B0",
     performance: "\uC131\uB2A5",
     tokenBreakdown: "\uD1A0\uD070",
-    todayCost: "\uC624\uB298",
-    lastPrompt: "\uB9C8\uC9C0\uB9C9 \uD504\uB86C\uD504\uD2B8"
+    todayCost: "\uC624\uB298"
   },
   checkUsage: {
     title: "CLI \uC0AC\uC6A9\uB7C9 \uB300\uC2DC\uBCF4\uB4DC",
@@ -1301,7 +1299,7 @@ var projectInfoWidget = {
       behind,
       subPath,
       worktreeName,
-      remoteUrl
+      remoteUrl: remoteUrl && branch ? `${remoteUrl}/tree/${branch}` : void 0
     };
   },
   render(data, _ctx) {
@@ -3369,7 +3367,7 @@ var lastPromptWidget = {
   render(data, _ctx) {
     const theme = getTheme();
     const timeStr = new Date(data.timestamp).toTimeString().slice(0, 5);
-    return `${colorize("\u25B8", theme.accent)} ${colorize(timeStr, theme.secondary)} ${truncate(data.text, 60)}`;
+    return `\u{1F4AC} ${colorize(timeStr, theme.secondary)} ${truncate(data.text, 60)}`;
   }
 };
 

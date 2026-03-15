@@ -378,7 +378,7 @@ export interface ProjectInfoData {
   subPath?: string;
   /** Worktree name when in --worktree session */
   worktreeName?: string;
-  /** Git remote HTTPS URL for OSC8 hyperlink */
+  /** Git remote HTTPS URL for OSC8 hyperlink (includes /tree/{branch}) */
   remoteUrl?: string;
 }
 

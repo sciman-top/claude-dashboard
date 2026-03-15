@@ -38,8 +38,7 @@
     "budget": "예산",
     "performance": "성능",
     "tokenBreakdown": "토큰",
-    "todayCost": "오늘",
-    "lastPrompt": "마지막 프롬프트"
+    "todayCost": "오늘"
   },
   "checkUsage": {
     "title": "CLI 사용량 대시보드",

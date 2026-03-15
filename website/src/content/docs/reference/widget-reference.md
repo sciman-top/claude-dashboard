@@ -178,8 +178,8 @@ abc12345-6789-0def-ghij-klmnopqrstuv
 
 **Example output:**
 ```
-▸ 14:32 Fix the authentication bug in middleware
-▸ 09:15 Add unit tests for the API client
+💬 14:32 Fix the authentication bug in middleware
+💬 09:15 Add unit tests for the API client
 ```
 
 ### configCounts

@@ -26,6 +26,6 @@ export const lastPromptWidget: Widget<LastPromptData> = {
   render(data: LastPromptData, _ctx: WidgetContext): string {
     const theme = getTheme();
     const timeStr = new Date(data.timestamp).toTimeString().slice(0, 5);
-    return `${colorize('▸', theme.accent)} ${colorize(timeStr, theme.secondary)} ${truncate(data.text, 60)}`;
+    return `💬 ${colorize(timeStr, theme.secondary)} ${truncate(data.text, 60)}`;
   },
 };
