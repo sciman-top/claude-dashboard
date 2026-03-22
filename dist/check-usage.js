@@ -105,9 +105,13 @@ var usageCacheMap = /* @__PURE__ */ new Map();
 var pendingRequests = /* @__PURE__ */ new Map();
 var lastTokenHash = null;
 var lastCleanupTime = 0;
+var dirEnsured = false;
 async function ensureCacheDir() {
+  if (dirEnsured)
+    return;
   try {
     await mkdir(CACHE_DIR, { recursive: true, mode: 448 });
+    dirEnsured = true;
   } catch {
   }
 }
@@ -275,12 +279,23 @@ async function fetchFromApi(token, tokenHash) {
     return null;
   }
 }
+function validateLimitWindow(raw) {
+  if (!raw || typeof raw !== "object")
+    return null;
+  const w = raw;
+  if (typeof w.utilization !== "number")
+    return null;
+  return {
+    utilization: w.utilization,
+    resets_at: typeof w.resets_at === "string" ? w.resets_at : null
+  };
+}
 async function parseAndCacheLimits(data, tokenHash) {
-  const d = data;
+  const d = data && typeof data === "object" ? data : {};
   const limits = {
-    five_hour: d.five_hour ?? null,
-    seven_day: d.seven_day ?? null,
-    seven_day_sonnet: d.seven_day_sonnet ?? null
+    five_hour: validateLimitWindow(d.five_hour),
+    seven_day: validateLimitWindow(d.seven_day),
+    seven_day_sonnet: validateLimitWindow(d.seven_day_sonnet)
   };
   usageCacheMap.set(tokenHash, { data: limits, timestamp: Date.now() });
   await saveFileCache(tokenHash, limits);
@@ -493,7 +508,7 @@ async function fetchCodexUsage(ttlSeconds = 60) {
   if (pending) {
     return pending;
   }
-  const requestPromise = fetchFromCodexApi(auth);
+  const requestPromise = fetchFromCodexApi(auth, tokenHash);
   pendingRequests2.set(tokenHash, requestPromise);
   try {
     const result = await requestPromise;
@@ -514,7 +529,7 @@ async function fetchCodexUsage(ttlSeconds = 60) {
     pendingRequests2.delete(tokenHash);
   }
 }
-async function fetchFromCodexApi(auth) {
+async function fetchFromCodexApi(auth, tokenHash) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS2);
   try {
@@ -540,22 +555,20 @@ async function fetchFromCodexApi(auth) {
       debugLog("codex", "fetchFromCodexApi: invalid response structure");
       return null;
     }
-    const typedData = data;
-    debugLog("codex", "fetchFromCodexApi: got data", typedData.plan_type);
+    debugLog("codex", "fetchFromCodexApi: got data", data.plan_type);
     const model = await getCodexModel();
     const limits = {
       model: model ?? "unknown",
-      planType: typedData.plan_type,
-      primary: typedData.rate_limit.primary_window ? {
-        usedPercent: typedData.rate_limit.primary_window.used_percent,
-        resetAt: typedData.rate_limit.primary_window.reset_at
+      planType: data.plan_type,
+      primary: data.rate_limit.primary_window ? {
+        usedPercent: data.rate_limit.primary_window.used_percent,
+        resetAt: data.rate_limit.primary_window.reset_at
       } : null,
-      secondary: typedData.rate_limit.secondary_window ? {
-        usedPercent: typedData.rate_limit.secondary_window.used_percent,
-        resetAt: typedData.rate_limit.secondary_window.reset_at
+      secondary: data.rate_limit.secondary_window ? {
+        usedPercent: data.rate_limit.secondary_window.used_percent,
+        resetAt: data.rate_limit.secondary_window.reset_at
       } : null
     };
-    const tokenHash = hashToken(auth.accessToken);
     codexCacheMap.set(tokenHash, { data: limits, timestamp: Date.now() });
     debugLog("codex", "fetchFromCodexApi: success", limits);
     return limits;
@@ -588,6 +601,8 @@ var geminiCacheMap = /* @__PURE__ */ new Map();
 var pendingRequests3 = /* @__PURE__ */ new Map();
 var pendingRefreshRequests = /* @__PURE__ */ new Map();
 var cachedCredentials = null;
+var keychainCache = null;
+var KEYCHAIN_CACHE_TTL_MS2 = 1e4;
 var cachedSettings = null;
 function getGeminiDir() {
   return path3.join(os3.homedir(), GEMINI_DIR);
@@ -609,6 +624,9 @@ async function getTokenFromKeychain() {
   if (os3.platform() !== "darwin") {
     return null;
   }
+  if (keychainCache && Date.now() - keychainCache.timestamp < KEYCHAIN_CACHE_TTL_MS2) {
+    return keychainCache.data;
+  }
   try {
     const result = execFileSync3(
       "security",
@@ -616,18 +634,23 @@ async function getTokenFromKeychain() {
       { encoding: "utf-8", timeout: 3e3, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
     if (!result) {
+      keychainCache = { data: null, timestamp: Date.now() };
       return null;
     }
     const stored = JSON.parse(result);
     if (!stored.token?.accessToken) {
+      keychainCache = { data: null, timestamp: Date.now() };
       return null;
     }
-    return {
+    const data = {
       accessToken: stored.token.accessToken,
       refreshToken: stored.token.refreshToken,
       expiryDate: stored.token.expiresAt
     };
+    keychainCache = { data, timestamp: Date.now() };
+    return data;
   } catch {
+    keychainCache = { data: null, timestamp: Date.now() };
     return null;
   }
 }
@@ -986,11 +1009,32 @@ function getZaiApiBaseUrl() {
   }
 }
 
-// scripts/utils/zai-api-client.ts
-var API_TIMEOUT_MS4 = 5e3;
+// scripts/utils/formatters.ts
+function formatTimeRemaining(resetAt, t) {
+  const reset = typeof resetAt === "string" ? new Date(resetAt) : resetAt;
+  const now = /* @__PURE__ */ new Date();
+  const diffMs = reset.getTime() - now.getTime();
+  if (diffMs <= 0)
+    return `0${t.time.minutes}`;
+  const totalMinutes = Math.floor(diffMs / (1e3 * 60));
+  const totalHours = Math.floor(totalMinutes / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const minutes = totalMinutes % 60;
+  if (days > 0) {
+    return `${days}${t.time.days}${hours}${t.time.hours}`;
+  }
+  if (hours > 0) {
+    return `${hours}${t.time.hours}${minutes}${t.time.minutes}`;
+  }
+  return `${minutes}${t.time.minutes}`;
+}
 function clampPercent(value) {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
+
+// scripts/utils/zai-api-client.ts
+var API_TIMEOUT_MS4 = 5e3;
 function calculateUsagePercent(currentValue, remaining) {
   const total = currentValue + remaining;
   if (total <= 0) {
@@ -1138,27 +1182,6 @@ async function fetchFromZaiApi(baseUrl, authToken) {
     debugLog("zai", "fetchFromZaiApi: error", err);
     return null;
   }
-}
-
-// scripts/utils/formatters.ts
-function formatTimeRemaining(resetAt, t) {
-  const reset = typeof resetAt === "string" ? new Date(resetAt) : resetAt;
-  const now = /* @__PURE__ */ new Date();
-  const diffMs = reset.getTime() - now.getTime();
-  if (diffMs <= 0)
-    return `0${t.time.minutes}`;
-  const totalMinutes = Math.floor(diffMs / (1e3 * 60));
-  const totalHours = Math.floor(totalMinutes / 60);
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-  const minutes = totalMinutes % 60;
-  if (days > 0) {
-    return `${days}${t.time.days}${hours}${t.time.hours}`;
-  }
-  if (hours > 0) {
-    return `${hours}${t.time.hours}${minutes}${t.time.minutes}`;
-  }
-  return `${minutes}${t.time.minutes}`;
 }
 
 // scripts/utils/colors.ts

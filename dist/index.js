@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/statusline.ts
-import { readFile as readFile8, stat as stat9 } from "fs/promises";
+import { readFile as readFile9, stat as stat9 } from "fs/promises";
 import { join as join6 } from "path";
 import { homedir as homedir6 } from "os";
 
@@ -511,9 +511,13 @@ var usageCacheMap = /* @__PURE__ */ new Map();
 var pendingRequests = /* @__PURE__ */ new Map();
 var lastTokenHash = null;
 var lastCleanupTime = 0;
+var dirEnsured = false;
 async function ensureCacheDir() {
+  if (dirEnsured)
+    return;
   try {
     await mkdir(CACHE_DIR, { recursive: true, mode: 448 });
+    dirEnsured = true;
   } catch {
   }
 }
@@ -681,12 +685,23 @@ async function fetchFromApi(token, tokenHash) {
     return null;
   }
 }
+function validateLimitWindow(raw) {
+  if (!raw || typeof raw !== "object")
+    return null;
+  const w = raw;
+  if (typeof w.utilization !== "number")
+    return null;
+  return {
+    utilization: w.utilization,
+    resets_at: typeof w.resets_at === "string" ? w.resets_at : null
+  };
+}
 async function parseAndCacheLimits(data, tokenHash) {
-  const d = data;
+  const d = data && typeof data === "object" ? data : {};
   const limits = {
-    five_hour: d.five_hour ?? null,
-    seven_day: d.seven_day ?? null,
-    seven_day_sonnet: d.seven_day_sonnet ?? null
+    five_hour: validateLimitWindow(d.five_hour),
+    seven_day: validateLimitWindow(d.seven_day),
+    seven_day_sonnet: validateLimitWindow(d.seven_day_sonnet)
   };
   usageCacheMap.set(tokenHash, { data: limits, timestamp: Date.now() });
   await saveFileCache(tokenHash, limits);
@@ -958,6 +973,9 @@ function formatDuration(ms, t) {
 function truncate(str, maxLen) {
   return str.length <= maxLen ? str : str.slice(0, maxLen) + "\u2026";
 }
+function clampPercent(value) {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
 function osc8Link(url, text) {
   return `\x1B]8;;${url}\x1B\\${text}\x1B]8;;\x1B\\`;
 }
@@ -1216,6 +1234,8 @@ function execGit(args, cwd, timeout) {
 }
 
 // scripts/widgets/project-info.ts
+var GIT_CACHE_TTL_MS = 5e3;
+var gitCache = null;
 async function getGitBranch(cwd) {
   try {
     const result = await execGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd, 500);
@@ -1264,6 +1284,20 @@ function normalizeGitUrl(url) {
     return `https://${httpsMatch[1]}`;
   return null;
 }
+async function getGitData(cwd) {
+  if (gitCache && gitCache.cwd === cwd && Date.now() - gitCache.timestamp < GIT_CACHE_TTL_MS) {
+    return gitCache.data;
+  }
+  const [branch, dirty, ab, remoteUrl] = await Promise.all([
+    getGitBranch(cwd),
+    isGitDirty(cwd),
+    getAheadBehind(cwd),
+    getGitRemoteUrl(cwd)
+  ]);
+  const data = { branch, dirty, ab, remoteUrl };
+  gitCache = { cwd, data, timestamp: Date.now() };
+  return data;
+}
 var projectInfoWidget = {
   id: "projectInfo",
   name: "Project Info",
@@ -1276,12 +1310,7 @@ var projectInfoWidget = {
     const dirName = basename(projectDir || currentDir);
     const subPath = projectDir && currentDir !== projectDir && currentDir.startsWith(projectDir + "/") ? relative(projectDir, currentDir) : void 0;
     const worktreeName = ctx.stdin.worktree?.name || void 0;
-    const [branch, dirty, ab, remoteUrl] = await Promise.all([
-      getGitBranch(currentDir),
-      isGitDirty(currentDir),
-      getAheadBehind(currentDir),
-      getGitRemoteUrl(currentDir)
-    ]);
+    const { branch, dirty, ab, remoteUrl } = await getGitData(currentDir);
     let gitBranch;
     let ahead;
     let behind;
@@ -1326,19 +1355,10 @@ var projectInfoWidget = {
 };
 
 // scripts/widgets/config-counts.ts
-import { readdir as readdir2, access } from "fs/promises";
+import { readdir as readdir2, readFile as readFile4 } from "fs/promises";
 import { join as join3 } from "path";
-import { constants } from "fs";
 var CONFIG_CACHE_TTL_MS = 3e4;
 var configCountsCache = null;
-async function pathExists(path4) {
-  try {
-    await access(path4, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
 async function countFiles(dir, pattern) {
   try {
     const files = await readdir2(dir);
@@ -1350,36 +1370,40 @@ async function countFiles(dir, pattern) {
     return 0;
   }
 }
+async function fileExists(path4) {
+  try {
+    await readFile4(path4, { flag: "r" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function countClaudeMd(projectDir) {
-  let count = 0;
-  if (await pathExists(join3(projectDir, "CLAUDE.md"))) {
-    count++;
-  }
-  if (await pathExists(join3(projectDir, ".claude", "CLAUDE.md"))) {
-    count++;
-  }
-  return count;
+  const [root, nested] = await Promise.all([
+    fileExists(join3(projectDir, "CLAUDE.md")),
+    fileExists(join3(projectDir, ".claude", "CLAUDE.md"))
+  ]);
+  return (root ? 1 : 0) + (nested ? 1 : 0);
 }
 async function countMcps(projectDir) {
-  const { readFile: readFile9 } = await import("fs/promises");
   const homeDir = process.env.HOME || "";
   const mcpPaths = [
     { path: join3(projectDir, ".claude", "mcp.json"), key: "mcpServers" },
     { path: join3(homeDir, ".claude.json"), key: "mcpServers" },
     { path: join3(homeDir, ".config", "claude-code", "mcp.json"), key: "mcpServers" }
   ];
-  let totalCount = 0;
-  for (const { path: path4, key } of mcpPaths) {
-    if (await pathExists(path4)) {
+  const counts = await Promise.all(
+    mcpPaths.map(async ({ path: path4, key }) => {
       try {
-        const content = await readFile9(path4, "utf-8");
+        const content = await readFile4(path4, "utf-8");
         const config = JSON.parse(content);
-        totalCount += Object.keys(config[key] || {}).length;
+        return Object.keys(config[key] || {}).length;
       } catch {
+        return 0;
       }
-    }
-  }
-  return totalCount;
+    })
+  );
+  return counts.reduce((a, b) => a + b, 0);
 }
 var configCountsWidget = {
   id: "configCounts",
@@ -1423,7 +1447,7 @@ var configCountsWidget = {
 };
 
 // scripts/utils/session.ts
-import { readFile as readFile4, mkdir as mkdir2, open, readdir as readdir3, unlink as unlink2, stat as stat4 } from "fs/promises";
+import { readFile as readFile5, mkdir as mkdir2, open, readdir as readdir3, unlink as unlink2, stat as stat4 } from "fs/promises";
 import { join as join4 } from "path";
 import { homedir as homedir3 } from "os";
 var SESSION_DIR = join4(homedir3(), ".cache", "claude-dashboard", "sessions");
@@ -1458,7 +1482,7 @@ async function getSessionStartTime(sessionId) {
 async function getOrCreateSessionStartTimeImpl(safeSessionId) {
   const sessionFile = join4(SESSION_DIR, `${safeSessionId}.json`);
   try {
-    const content = await readFile4(sessionFile, "utf-8");
+    const content = await readFile5(sessionFile, "utf-8");
     const data = JSON.parse(content);
     if (typeof data.startTime !== "number") {
       debugLog("session", `Invalid session file format for ${safeSessionId}`);
@@ -1486,7 +1510,7 @@ async function getOrCreateSessionStartTimeImpl(safeSessionId) {
     } catch (writeError) {
       if (isErrnoException(writeError, "EEXIST")) {
         try {
-          const content = await readFile4(sessionFile, "utf-8");
+          const content = await readFile5(sessionFile, "utf-8");
           const data = JSON.parse(content);
           if (typeof data.startTime === "number") {
             sessionCache.set(safeSessionId, data.startTime);
@@ -1566,6 +1590,20 @@ var sessionDurationWidget = {
 import { open as open2, stat as stat5 } from "fs/promises";
 import { basename as basename2 } from "path";
 var cachedTranscript = null;
+function createParsedTranscript() {
+  return {
+    toolUses: /* @__PURE__ */ new Map(),
+    toolResults: /* @__PURE__ */ new Set(),
+    runningToolIds: /* @__PURE__ */ new Set(),
+    lastTodoWriteInput: null,
+    activeAgentIds: /* @__PURE__ */ new Set(),
+    completedAgentCount: 0,
+    tasks: /* @__PURE__ */ new Map(),
+    nextTaskId: 1,
+    pendingTaskCreates: /* @__PURE__ */ new Map(),
+    pendingTaskUpdates: /* @__PURE__ */ new Map()
+  };
+}
 function parseJsonlContent(content) {
   const entries = [];
   for (const line of content.split("\n")) {
@@ -1580,7 +1618,6 @@ function parseJsonlContent(content) {
 }
 function processEntries(entries, existing) {
   for (const entry of entries) {
-    existing.entries.push(entry);
     if (!existing.sessionStartTime && entry.timestamp) {
       existing.sessionStartTime = new Date(entry.timestamp).getTime();
     }
@@ -1595,6 +1632,31 @@ function processEntries(entries, existing) {
             timestamp: entry.timestamp,
             input: block.input
           });
+          existing.runningToolIds.add(block.id);
+          if (block.name === "Task") {
+            existing.activeAgentIds.add(block.id);
+          }
+          if (block.name === "TaskCreate") {
+            const input = block.input;
+            if (input?.subject) {
+              const seqId = String(existing.nextTaskId);
+              existing.nextTaskId++;
+              existing.pendingTaskCreates.set(block.id, {
+                subject: input.subject,
+                status: normalizeTaskStatus(input.status || "pending"),
+                seqId
+              });
+            }
+          } else if (block.name === "TaskUpdate") {
+            const input = block.input;
+            if (input?.taskId) {
+              existing.pendingTaskUpdates.set(block.id, {
+                taskId: input.taskId,
+                status: input.status,
+                subject: input.subject
+              });
+            }
+          }
         }
       }
     }
@@ -1602,6 +1664,33 @@ function processEntries(entries, existing) {
       for (const block of entry.message.content) {
         if (block.type === "tool_result" && block.tool_use_id) {
           existing.toolResults.add(block.tool_use_id);
+          existing.runningToolIds.delete(block.tool_use_id);
+          if (existing.activeAgentIds.delete(block.tool_use_id)) {
+            existing.completedAgentCount++;
+          }
+          const tool = existing.toolUses.get(block.tool_use_id);
+          if (tool?.name === "TodoWrite") {
+            existing.lastTodoWriteInput = tool.input;
+          }
+          const pendingCreate = existing.pendingTaskCreates.get(block.tool_use_id);
+          if (pendingCreate) {
+            existing.tasks.set(pendingCreate.seqId, {
+              subject: pendingCreate.subject,
+              status: pendingCreate.status
+            });
+            existing.pendingTaskCreates.delete(block.tool_use_id);
+          }
+          const pendingUpdate = existing.pendingTaskUpdates.get(block.tool_use_id);
+          if (pendingUpdate) {
+            const task = existing.tasks.get(pendingUpdate.taskId);
+            if (task) {
+              if (pendingUpdate.status)
+                task.status = normalizeTaskStatus(pendingUpdate.status);
+              if (pendingUpdate.subject)
+                task.subject = pendingUpdate.subject;
+            }
+            existing.pendingTaskUpdates.delete(block.tool_use_id);
+          }
         }
       }
     }
@@ -1634,11 +1723,7 @@ async function parseTranscript(transcriptPath) {
       return cachedTranscript.data;
     }
     const content = await readFromOffset(transcriptPath, 0, fileSize);
-    const data = {
-      entries: [],
-      toolUses: /* @__PURE__ */ new Map(),
-      toolResults: /* @__PURE__ */ new Set()
-    };
+    const data = createParsedTranscript();
     processEntries(parseJsonlContent(content), data);
     cachedTranscript = { path: transcriptPath, size: fileSize, data };
     return data;
@@ -1666,14 +1751,15 @@ function extractToolTarget(name, input) {
 }
 function getRunningTools(transcript) {
   const running = [];
-  for (const [id, tool] of transcript.toolUses) {
-    if (!transcript.toolResults.has(id)) {
-      running.push({
-        name: tool.name,
-        startTime: tool.timestamp ? new Date(tool.timestamp).getTime() : Date.now(),
-        target: extractToolTarget(tool.name, tool.input)
-      });
-    }
+  for (const id of transcript.runningToolIds) {
+    const tool = transcript.toolUses.get(id);
+    if (!tool)
+      continue;
+    running.push({
+      name: tool.name,
+      startTime: tool.timestamp ? new Date(tool.timestamp).getTime() : Date.now(),
+      target: extractToolTarget(tool.name, tool.input)
+    });
   }
   return running;
 }
@@ -1694,12 +1780,7 @@ function normalizeTaskStatus(status) {
   }
 }
 function extractTodoProgress(transcript) {
-  let lastTodoWrite = null;
-  for (const [id, tool] of transcript.toolUses) {
-    if (tool.name === "TodoWrite" && transcript.toolResults.has(id)) {
-      lastTodoWrite = tool.input;
-    }
-  }
+  const lastTodoWrite = transcript.lastTodoWriteInput;
   if (!lastTodoWrite || typeof lastTodoWrite !== "object") {
     return null;
   }
@@ -1724,40 +1805,9 @@ function extractTodoProgress(transcript) {
   };
 }
 function extractTaskProgress(transcript) {
-  const tasks = /* @__PURE__ */ new Map();
-  let nextId = 1;
-  for (const entry of transcript.entries) {
-    if (entry.type !== "assistant" || !entry.message?.content)
-      continue;
-    for (const block of entry.message.content) {
-      if (block.type !== "tool_use" || !block.id || !block.input)
-        continue;
-      if (!transcript.toolResults.has(block.id))
-        continue;
-      if (block.name === "TaskCreate") {
-        const input = block.input;
-        if (input.subject) {
-          tasks.set(String(nextId), {
-            subject: input.subject,
-            status: normalizeTaskStatus(input.status || "pending")
-          });
-          nextId++;
-        }
-      } else if (block.name === "TaskUpdate") {
-        const input = block.input;
-        if (input.taskId && tasks.has(input.taskId)) {
-          const task = tasks.get(input.taskId);
-          if (input.status)
-            task.status = normalizeTaskStatus(input.status);
-          if (input.subject)
-            task.subject = input.subject;
-        }
-      }
-    }
-  }
-  if (tasks.size === 0)
+  if (transcript.tasks.size === 0)
     return null;
-  const all = [...tasks.values()];
+  const all = [...transcript.tasks.values()];
   const completed = all.filter((t) => t.status === "completed").length;
   const current = all.find(
     (t) => t.status === "in_progress" || t.status === "pending"
@@ -1771,23 +1821,25 @@ function extractTaskProgress(transcript) {
 function extractTodoOrTaskProgress(transcript) {
   return extractTaskProgress(transcript) ?? extractTodoProgress(transcript);
 }
+async function getTranscript(ctx) {
+  const transcriptPath = ctx.stdin.transcript_path;
+  if (!transcriptPath)
+    return null;
+  return parseTranscript(transcriptPath);
+}
 function extractAgentStatus(transcript) {
   const active = [];
-  let completed = 0;
-  for (const [id, tool] of transcript.toolUses) {
-    if (tool.name === "Task") {
-      if (transcript.toolResults.has(id)) {
-        completed++;
-      } else {
-        const input = tool.input;
-        active.push({
-          name: input?.subagent_type || "Agent",
-          description: input?.description
-        });
-      }
-    }
+  for (const id of transcript.activeAgentIds) {
+    const tool = transcript.toolUses.get(id);
+    if (!tool)
+      continue;
+    const input = tool.input;
+    active.push({
+      name: input?.subagent_type || "Agent",
+      description: input?.description
+    });
   }
-  return { active, completed };
+  return { active, completed: transcript.completedAgentCount };
 }
 
 // scripts/widgets/tool-activity.ts
@@ -1795,14 +1847,9 @@ var toolActivityWidget = {
   id: "toolActivity",
   name: "Tool Activity",
   async getData(ctx) {
-    const transcriptPath = ctx.stdin.transcript_path;
-    if (!transcriptPath) {
+    const transcript = await getTranscript(ctx);
+    if (!transcript)
       return null;
-    }
-    const transcript = await parseTranscript(transcriptPath);
-    if (!transcript) {
-      return null;
-    }
     const running = getRunningTools(transcript);
     const completed = getCompletedToolCount(transcript);
     return { running, completed };
@@ -1827,14 +1874,9 @@ var agentStatusWidget = {
   id: "agentStatus",
   name: "Agent Status",
   async getData(ctx) {
-    const transcriptPath = ctx.stdin.transcript_path;
-    if (!transcriptPath) {
+    const transcript = await getTranscript(ctx);
+    if (!transcript)
       return null;
-    }
-    const transcript = await parseTranscript(transcriptPath);
-    if (!transcript) {
-      return null;
-    }
     const status = extractAgentStatus(transcript);
     if (status.active.length === 0 && status.completed === 0) {
       return null;
@@ -1862,14 +1904,9 @@ var todoProgressWidget = {
   id: "todoProgress",
   name: "Todo Progress",
   async getData(ctx) {
-    const transcriptPath = ctx.stdin.transcript_path;
-    if (!transcriptPath) {
+    const transcript = await getTranscript(ctx);
+    if (!transcript)
       return null;
-    }
-    const transcript = await parseTranscript(transcriptPath);
-    if (!transcript) {
-      return null;
-    }
     const progress = extractTodoOrTaskProgress(transcript);
     return progress || { total: 0, completed: 0 };
   },
@@ -1984,7 +2021,7 @@ var cacheHitWidget = {
 };
 
 // scripts/utils/codex-client.ts
-import { readFile as readFile5, stat as stat6, writeFile as writeFile2, mkdir as mkdir3 } from "fs/promises";
+import { readFile as readFile6, stat as stat6, writeFile as writeFile2, mkdir as mkdir3 } from "fs/promises";
 import { execFileSync as execFileSync2 } from "child_process";
 import os2 from "os";
 import path2 from "path";
@@ -2013,7 +2050,7 @@ async function getCodexAuth() {
     if (cachedAuth && cachedAuth.mtime === fileStat.mtimeMs) {
       return cachedAuth.data;
     }
-    const raw = await readFile5(CODEX_AUTH_PATH, "utf-8");
+    const raw = await readFile6(CODEX_AUTH_PATH, "utf-8");
     const json = JSON.parse(raw);
     const accessToken = json?.tokens?.access_token;
     const accountId = json?.tokens?.account_id;
@@ -2029,7 +2066,7 @@ async function getCodexAuth() {
 }
 async function getModelFromConfig() {
   try {
-    const raw = await readFile5(CODEX_CONFIG_PATH, "utf-8");
+    const raw = await readFile6(CODEX_CONFIG_PATH, "utf-8");
     const match = raw.match(/^model\s*=\s*["']([^"']+)["']\s*(?:#.*)?$/m);
     return match ? match[1] : null;
   } catch {
@@ -2046,7 +2083,7 @@ async function getConfigMtime() {
 }
 async function getCachedModel(currentMtime) {
   try {
-    const raw = await readFile5(MODEL_CACHE_PATH, "utf-8");
+    const raw = await readFile6(MODEL_CACHE_PATH, "utf-8");
     const cache = JSON.parse(raw);
     if (cache.configMtime === currentMtime && cache.model) {
       debugLog("codex", "getCachedModel: cache hit", cache.model);
@@ -2129,7 +2166,7 @@ async function fetchCodexUsage(ttlSeconds = 60) {
   if (pending) {
     return pending;
   }
-  const requestPromise = fetchFromCodexApi(auth);
+  const requestPromise = fetchFromCodexApi(auth, tokenHash);
   pendingRequests3.set(tokenHash, requestPromise);
   try {
     const result = await requestPromise;
@@ -2150,7 +2187,7 @@ async function fetchCodexUsage(ttlSeconds = 60) {
     pendingRequests3.delete(tokenHash);
   }
 }
-async function fetchFromCodexApi(auth) {
+async function fetchFromCodexApi(auth, tokenHash) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS2);
   try {
@@ -2176,22 +2213,20 @@ async function fetchFromCodexApi(auth) {
       debugLog("codex", "fetchFromCodexApi: invalid response structure");
       return null;
     }
-    const typedData = data;
-    debugLog("codex", "fetchFromCodexApi: got data", typedData.plan_type);
+    debugLog("codex", "fetchFromCodexApi: got data", data.plan_type);
     const model = await getCodexModel();
     const limits = {
       model: model ?? "unknown",
-      planType: typedData.plan_type,
-      primary: typedData.rate_limit.primary_window ? {
-        usedPercent: typedData.rate_limit.primary_window.used_percent,
-        resetAt: typedData.rate_limit.primary_window.reset_at
+      planType: data.plan_type,
+      primary: data.rate_limit.primary_window ? {
+        usedPercent: data.rate_limit.primary_window.used_percent,
+        resetAt: data.rate_limit.primary_window.reset_at
       } : null,
-      secondary: typedData.rate_limit.secondary_window ? {
-        usedPercent: typedData.rate_limit.secondary_window.used_percent,
-        resetAt: typedData.rate_limit.secondary_window.reset_at
+      secondary: data.rate_limit.secondary_window ? {
+        usedPercent: data.rate_limit.secondary_window.used_percent,
+        resetAt: data.rate_limit.secondary_window.reset_at
       } : null
     };
-    const tokenHash = hashToken(auth.accessToken);
     codexCacheMap.set(tokenHash, { data: limits, timestamp: Date.now() });
     debugLog("codex", "fetchFromCodexApi: success", limits);
     return limits;
@@ -2266,7 +2301,7 @@ var codexUsageWidget = {
 };
 
 // scripts/utils/gemini-client.ts
-import { readFile as readFile6, writeFile as writeFile3, stat as stat7 } from "fs/promises";
+import { readFile as readFile7, writeFile as writeFile3, stat as stat7 } from "fs/promises";
 import { execFileSync as execFileSync3 } from "child_process";
 import os3 from "os";
 import path3 from "path";
@@ -2286,6 +2321,8 @@ var geminiCacheMap = /* @__PURE__ */ new Map();
 var pendingRequests4 = /* @__PURE__ */ new Map();
 var pendingRefreshRequests = /* @__PURE__ */ new Map();
 var cachedCredentials = null;
+var keychainCache = null;
+var KEYCHAIN_CACHE_TTL_MS2 = 1e4;
 var cachedSettings = null;
 function getGeminiDir() {
   return path3.join(os3.homedir(), GEMINI_DIR);
@@ -2307,6 +2344,9 @@ async function getTokenFromKeychain() {
   if (os3.platform() !== "darwin") {
     return null;
   }
+  if (keychainCache && Date.now() - keychainCache.timestamp < KEYCHAIN_CACHE_TTL_MS2) {
+    return keychainCache.data;
+  }
   try {
     const result = execFileSync3(
       "security",
@@ -2314,18 +2354,23 @@ async function getTokenFromKeychain() {
       { encoding: "utf-8", timeout: 3e3, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
     if (!result) {
+      keychainCache = { data: null, timestamp: Date.now() };
       return null;
     }
     const stored = JSON.parse(result);
     if (!stored.token?.accessToken) {
+      keychainCache = { data: null, timestamp: Date.now() };
       return null;
     }
-    return {
+    const data = {
       accessToken: stored.token.accessToken,
       refreshToken: stored.token.refreshToken,
       expiryDate: stored.token.expiresAt
     };
+    keychainCache = { data, timestamp: Date.now() };
+    return data;
   } catch {
+    keychainCache = { data: null, timestamp: Date.now() };
     return null;
   }
 }
@@ -2336,7 +2381,7 @@ async function getCredentialsFromFile2() {
     if (cachedCredentials && cachedCredentials.mtime === fileStat.mtimeMs) {
       return cachedCredentials.data;
     }
-    const raw = await readFile6(oauthPath, "utf-8");
+    const raw = await readFile7(oauthPath, "utf-8");
     const json = JSON.parse(raw);
     const accessToken = json?.access_token;
     if (!accessToken) {
@@ -2427,7 +2472,7 @@ async function saveCredentialsToFile(credentials, rawResponse) {
     const oauthPath = path3.join(getGeminiDir(), OAUTH_CREDS_FILE);
     let existingData = {};
     try {
-      const raw = await readFile6(oauthPath, "utf-8");
+      const raw = await readFile7(oauthPath, "utf-8");
       existingData = JSON.parse(raw);
     } catch {
     }
@@ -2470,7 +2515,7 @@ async function getGeminiSettings() {
     if (cachedSettings && cachedSettings.mtime === fileStat.mtimeMs) {
       return cachedSettings.data;
     }
-    const raw = await readFile6(settingsPath, "utf-8");
+    const raw = await readFile7(settingsPath, "utf-8");
     const json = JSON.parse(raw);
     const data = {
       cloudaicompanionProject: json?.cloudaicompanionProject,
@@ -2751,9 +2796,6 @@ var geminiUsageAllWidget = {
 
 // scripts/utils/zai-api-client.ts
 var API_TIMEOUT_MS4 = 5e3;
-function clampPercent(value) {
-  return Math.min(100, Math.max(0, Math.round(value)));
-}
 function calculateUsagePercent(currentValue, remaining) {
   const total = currentValue + remaining;
   if (total <= 0) {
@@ -3105,13 +3147,13 @@ var forecastWidget = {
 };
 
 // scripts/utils/budget.ts
-import { readFile as readFile7, mkdir as mkdir4, writeFile as writeFile4 } from "fs/promises";
+import { readFile as readFile8, mkdir as mkdir4, writeFile as writeFile4 } from "fs/promises";
 import { join as join5 } from "path";
 import { homedir as homedir4 } from "os";
 var BUDGET_DIR = join5(homedir4(), ".cache", "claude-dashboard");
 var BUDGET_FILE = join5(BUDGET_DIR, "budget.json");
 var budgetCache = null;
-var dirEnsured = false;
+var dirEnsured2 = false;
 var pendingRecordDaily = null;
 function getToday() {
   return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -3123,7 +3165,7 @@ async function loadBudgetState() {
   }
   const fresh = { date: today, dailyTotal: 0, sessions: {} };
   try {
-    const content = await readFile7(BUDGET_FILE, "utf-8");
+    const content = await readFile8(BUDGET_FILE, "utf-8");
     const state = JSON.parse(content);
     if (state.date !== today || !Number.isFinite(state.dailyTotal) || !state.sessions || typeof state.sessions !== "object") {
       return fresh;
@@ -3136,9 +3178,9 @@ async function loadBudgetState() {
 }
 async function saveBudgetState(state) {
   try {
-    if (!dirEnsured) {
+    if (!dirEnsured2) {
       await mkdir4(BUDGET_DIR, { recursive: true });
-      dirEnsured = true;
+      dirEnsured2 = true;
     }
     await writeFile4(BUDGET_FILE, JSON.stringify(state), "utf-8");
     budgetCache = state;
@@ -3163,6 +3205,8 @@ async function recordCostAndGetDailyImpl(sessionId, sessionCost) {
   }
   const lastSeen = state.sessions[sessionId] ?? 0;
   const delta = Math.max(0, sessionCost - lastSeen);
+  if (delta === 0)
+    return state.dailyTotal;
   state.dailyTotal += delta;
   state.sessions[sessionId] = sessionCost;
   saveBudgetState(state).catch(() => {
@@ -3304,10 +3348,7 @@ var sessionNameWidget = {
   id: "sessionName",
   name: "Session Name",
   async getData(ctx) {
-    const transcriptPath = ctx.stdin.transcript_path;
-    if (!transcriptPath)
-      return null;
-    const transcript = await parseTranscript(transcriptPath);
+    const transcript = await getTranscript(ctx);
     if (!transcript?.sessionName)
       return null;
     return { name: transcript.sessionName };
@@ -3338,13 +3379,22 @@ var todayCostWidget = {
 // scripts/utils/history-parser.ts
 import { open as open3, stat as stat8 } from "fs/promises";
 import { homedir as homedir5 } from "os";
+var HISTORY_PATH = `${homedir5()}/.claude/history.jsonl`;
+var CHUNK = 16 * 1024;
+var historyCache = null;
 async function getLastUserPrompt(sessionId) {
-  const historyPath = `${homedir5()}/.claude/history.jsonl`;
-  const CHUNK = 16 * 1024;
   try {
-    const fileStat = await stat8(historyPath);
+    const fileStat = await stat8(HISTORY_PATH);
+    if (historyCache && historyCache.fileSize === fileStat.size) {
+      const cached = historyCache.results.get(sessionId);
+      if (cached !== void 0)
+        return cached;
+    }
+    if (!historyCache || historyCache.fileSize !== fileStat.size) {
+      historyCache = { fileSize: fileStat.size, results: /* @__PURE__ */ new Map() };
+    }
     const size = Math.min(CHUNK, fileStat.size);
-    const fd = await open3(historyPath, "r");
+    const fd = await open3(HISTORY_PATH, "r");
     try {
       const buffer = Buffer.alloc(size);
       await fd.read(buffer, 0, size, fileStat.size - size);
@@ -3355,10 +3405,12 @@ async function getLastUserPrompt(sessionId) {
         try {
           const entry = JSON.parse(lines[i]);
           if (entry.sessionId === sessionId && entry.display?.trim() && entry.timestamp) {
-            return {
+            const result = {
               text: entry.display.replace(/\s+/g, " ").trim(),
               timestamp: entry.timestamp
             };
+            historyCache.results.set(sessionId, result);
+            return result;
           }
         } catch {
         }
@@ -3366,6 +3418,7 @@ async function getLastUserPrompt(sessionId) {
     } finally {
       await fd.close();
     }
+    historyCache.results.set(sessionId, null);
   } catch {
   }
   return null;
@@ -3492,7 +3545,7 @@ async function loadConfig() {
     if (configCache?.mtime === mtime) {
       return configCache.config;
     }
-    const content = await readFile8(CONFIG_PATH, "utf-8");
+    const content = await readFile9(CONFIG_PATH, "utf-8");
     const userConfig = JSON.parse(content);
     const config = {
       ...DEFAULT_CONFIG,
