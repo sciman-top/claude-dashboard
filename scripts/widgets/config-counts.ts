@@ -3,9 +3,8 @@
  * @handbook 3.3-widget-data-sources
  */
 
-import { readdir, access } from 'fs/promises';
+import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
-import { constants } from 'fs';
 import type { Widget } from './base.js';
 import type { WidgetContext, ConfigCountsData } from '../types.js';
 import { colorize, getTheme } from '../utils/colors.js';
@@ -26,18 +25,6 @@ let configCountsCache: {
 } | null = null;
 
 /**
- * Check if a path exists
- */
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Count files in a directory matching a pattern
  */
 async function countFiles(dir: string, pattern?: RegExp): Promise<number> {
@@ -53,53 +40,55 @@ async function countFiles(dir: string, pattern?: RegExp): Promise<number> {
 }
 
 /**
- * Count CLAUDE.md files (project root and .claude/)
+ * Check if a file exists by attempting to read 0 bytes.
+ * Avoids TOCTOU: single syscall instead of access() + readFile().
  */
-async function countClaudeMd(projectDir: string): Promise<number> {
-  let count = 0;
-
-  // Check root CLAUDE.md
-  if (await pathExists(join(projectDir, 'CLAUDE.md'))) {
-    count++;
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await readFile(path, { flag: 'r' });
+    return true;
+  } catch {
+    return false;
   }
-
-  // Check .claude/CLAUDE.md
-  if (await pathExists(join(projectDir, '.claude', 'CLAUDE.md'))) {
-    count++;
-  }
-
-  return count;
 }
 
 /**
- * Count MCP server configurations from project and global configs
+ * Count CLAUDE.md files (project root and .claude/)
+ */
+async function countClaudeMd(projectDir: string): Promise<number> {
+  const [root, nested] = await Promise.all([
+    fileExists(join(projectDir, 'CLAUDE.md')),
+    fileExists(join(projectDir, '.claude', 'CLAUDE.md')),
+  ]);
+  return (root ? 1 : 0) + (nested ? 1 : 0);
+}
+
+/**
+ * Count MCP server configurations from project and global configs.
+ * Reads files directly and catches ENOENT (no TOCTOU).
  */
 async function countMcps(projectDir: string): Promise<number> {
-  const { readFile } = await import('fs/promises');
   const homeDir = process.env.HOME || '';
 
-  // Check multiple MCP config locations
   const mcpPaths = [
     { path: join(projectDir, '.claude', 'mcp.json'), key: 'mcpServers' },
     { path: join(homeDir, '.claude.json'), key: 'mcpServers' },
     { path: join(homeDir, '.config', 'claude-code', 'mcp.json'), key: 'mcpServers' },
   ];
 
-  let totalCount = 0;
-
-  for (const { path, key } of mcpPaths) {
-    if (await pathExists(path)) {
+  const counts = await Promise.all(
+    mcpPaths.map(async ({ path, key }) => {
       try {
         const content = await readFile(path, 'utf-8');
         const config = JSON.parse(content);
-        totalCount += Object.keys(config[key] || {}).length;
+        return Object.keys(config[key] || {}).length;
       } catch {
-        // Parsing failed, skip this file
+        return 0;
       }
-    }
-  }
+    })
+  );
 
-  return totalCount;
+  return counts.reduce((a, b) => a + b, 0);
 }
 
 export const configCountsWidget: Widget<ConfigCountsData> = {

@@ -447,9 +447,6 @@ export function parseZaiUsage(limits: ZaiUsageLimits | null, installed: boolean)
 }
 
 /**
- * Main function
- */
-/**
  * Parse --lang argument from command line
  */
 function parseLangArg(args: string[]): 'en' | 'ko' | null {

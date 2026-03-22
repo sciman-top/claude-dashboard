@@ -273,7 +273,7 @@ export async function fetchCodexUsage(ttlSeconds: number = 60): Promise<CodexUsa
   }
 
   // Create new request
-  const requestPromise = fetchFromCodexApi(auth);
+  const requestPromise = fetchFromCodexApi(auth, tokenHash);
   pendingRequests.set(tokenHash, requestPromise);
 
   try {
@@ -305,7 +305,8 @@ export async function fetchCodexUsage(ttlSeconds: number = 60): Promise<CodexUsa
  * Internal API fetch
  */
 async function fetchFromCodexApi(
-  auth: CodexAuthData
+  auth: CodexAuthData,
+  tokenHash: string
 ): Promise<CodexUsageLimits | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
@@ -339,29 +340,27 @@ async function fetchFromCodexApi(
       return null;
     }
 
-    const typedData = data;
-    debugLog('codex', 'fetchFromCodexApi: got data', typedData.plan_type);
+    debugLog('codex', 'fetchFromCodexApi: got data', data.plan_type);
     const model = await getCodexModel();
 
     const limits: CodexUsageLimits = {
       model: model ?? 'unknown',
-      planType: typedData.plan_type,
-      primary: typedData.rate_limit.primary_window
+      planType: data.plan_type,
+      primary: data.rate_limit.primary_window
         ? {
-            usedPercent: typedData.rate_limit.primary_window.used_percent,
-            resetAt: typedData.rate_limit.primary_window.reset_at,
+            usedPercent: data.rate_limit.primary_window.used_percent,
+            resetAt: data.rate_limit.primary_window.reset_at,
           }
         : null,
-      secondary: typedData.rate_limit.secondary_window
+      secondary: data.rate_limit.secondary_window
         ? {
-            usedPercent: typedData.rate_limit.secondary_window.used_percent,
-            resetAt: typedData.rate_limit.secondary_window.reset_at,
+            usedPercent: data.rate_limit.secondary_window.used_percent,
+            resetAt: data.rate_limit.secondary_window.reset_at,
           }
         : null,
     };
 
     // Update cache
-    const tokenHash = hashToken(auth.accessToken);
     codexCacheMap.set(tokenHash, { data: limits, timestamp: Date.now() });
     debugLog('codex', 'fetchFromCodexApi: success', limits);
 

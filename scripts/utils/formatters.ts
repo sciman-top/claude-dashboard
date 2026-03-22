@@ -109,6 +109,14 @@ export function truncate(str: string, maxLen: number): string {
 }
 
 /**
+ * Clamp a value to the 0-100 percentage range.
+ * Useful for ensuring API-derived percentages are safe for display.
+ */
+export function clampPercent(value: number): number {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+/**
  * Wrap text in OSC8 hyperlink escape sequence.
  * Terminals that don't support OSC8 simply display the text without the link.
  * @see https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
