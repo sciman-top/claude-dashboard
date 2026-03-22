@@ -3,6 +3,7 @@
  * Prefers stdin data (total_lines_added/removed) when available,
  * falls back to git diff --shortstat.
  * @handbook 3.3-widget-data-sources
+ * @tested scripts/__tests__/widgets.test.ts
  */
 
 import type { Widget } from './base.js';

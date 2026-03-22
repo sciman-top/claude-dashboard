@@ -3,6 +3,7 @@
  * Fetches usage quota from z.ai or ZHIPU API
  * @handbook 7.1-common-api-pattern
  * @handbook 4.2-request-deduplication
+ * @tested scripts/__tests__/zai-api-client.test.ts
  */
 
 import { NEGATIVE_CACHE_SECONDS, type CacheEntry } from '../types.js';

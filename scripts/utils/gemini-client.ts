@@ -4,6 +4,7 @@
  * @handbook 7.1-common-api-pattern
  * @handbook 4.2-request-deduplication
  * @handbook 4.4-credential-caching
+ * @tested scripts/__tests__/gemini-client.test.ts
  */
 
 import { readFile, writeFile, stat } from 'fs/promises';

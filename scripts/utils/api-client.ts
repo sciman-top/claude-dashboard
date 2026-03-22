@@ -4,6 +4,7 @@
  * @handbook 4.2-request-deduplication
  * @handbook 4.3-429-retry
  * @handbook 7.1-common-api-pattern
+ * @tested scripts/__tests__/api-client.test.ts
  */
 import { readFile, writeFile, mkdir, readdir, stat, unlink } from 'fs/promises';
 import { execFile } from 'child_process';

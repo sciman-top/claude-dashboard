@@ -1,6 +1,8 @@
 /**
  * Transcript parser - parses Claude Code transcript.jsonl files
  * @handbook 4.5-transcript-incremental-parsing
+ * @tested scripts/__tests__/transcript-parser.test.ts
+ * @tested scripts/__tests__/widgets.test.ts
  * Uses incremental parsing: remembers last byte offset and only parses new content.
  * Running tools, agents, tasks, and todos are tracked incrementally in processEntries()
  * so extract functions read O(1) instead of scanning the full transcript.

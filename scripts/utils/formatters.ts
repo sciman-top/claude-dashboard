@@ -1,5 +1,6 @@
 /**
  * @handbook 2.1-naming-conventions
+ * @tested scripts/__tests__/formatters.test.ts
  */
 import type { Translations } from '../types.js';
 

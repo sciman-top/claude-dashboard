@@ -1,5 +1,25 @@
 /**
  * @handbook 8.1-test-structure
+ * @covers scripts/widgets/model.ts
+ * @covers scripts/widgets/context.ts
+ * @covers scripts/widgets/cost.ts
+ * @covers scripts/widgets/todo-progress.ts
+ * @covers scripts/widgets/agent-status.ts
+ * @covers scripts/widgets/tool-activity.ts
+ * @covers scripts/widgets/project-info.ts
+ * @covers scripts/widgets/burn-rate.ts
+ * @covers scripts/widgets/cache-hit.ts
+ * @covers scripts/widgets/depletion-time.ts
+ * @covers scripts/widgets/codex-usage.ts
+ * @covers scripts/widgets/gemini-usage.ts
+ * @covers scripts/widgets/config-counts.ts
+ * @covers scripts/widgets/session-duration.ts
+ * @covers scripts/widgets/version.ts
+ * @covers scripts/widgets/lines-changed.ts
+ * @covers scripts/widgets/output-style.ts
+ * @covers scripts/widgets/token-speed.ts
+ * @covers scripts/widgets/session-name.ts
+ * @covers scripts/widgets/today-cost.ts
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { modelWidget } from '../widgets/model.js';

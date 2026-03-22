@@ -1,6 +1,7 @@
 /**
  * Project info widget - displays directory name, git branch, and ahead/behind status
  * @handbook 3.3-widget-data-sources
+ * @tested scripts/__tests__/widgets.test.ts
  */
 
 import { basename, relative } from 'path';
