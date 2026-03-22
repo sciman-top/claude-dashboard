@@ -4,6 +4,7 @@
  * via the `display` field, excluding skill/command expansions.
  *
  * Uses size-based caching: only re-reads when file has grown.
+ * @tested scripts/__tests__/history-parser.test.ts
  */
 
 import { open, stat } from 'fs/promises';

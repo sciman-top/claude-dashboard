@@ -1,6 +1,7 @@
 /**
  * OAuth credential extraction with platform-specific caching
  * @handbook 4.4-credential-caching
+ * @tested scripts/__tests__/credentials.test.ts
  */
 import { execFile } from 'child_process';
 import { readFile, stat } from 'fs/promises';
