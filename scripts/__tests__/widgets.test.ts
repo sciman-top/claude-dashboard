@@ -1489,9 +1489,16 @@ describe('widgets', () => {
 
     it('should return null when transcript has no sessionName', async () => {
       vi.spyOn(transcriptParser, 'parseTranscript').mockResolvedValue({
-        entries: [],
         toolUses: new Map(),
         toolResults: new Set(),
+        runningToolIds: new Set(),
+        lastTodoWriteInput: null,
+        activeAgentIds: new Set(),
+        completedAgentCount: 0,
+        tasks: new Map(),
+        nextTaskId: 1,
+        pendingTaskCreates: new Map(),
+        pendingTaskUpdates: new Map(),
       });
 
       const ctx = createContext({ transcript_path: '/tmp/transcript.jsonl' });
@@ -1501,9 +1508,16 @@ describe('widgets', () => {
 
     it('should return session name from transcript', async () => {
       vi.spyOn(transcriptParser, 'parseTranscript').mockResolvedValue({
-        entries: [],
         toolUses: new Map(),
         toolResults: new Set(),
+        runningToolIds: new Set(),
+        lastTodoWriteInput: null,
+        activeAgentIds: new Set(),
+        completedAgentCount: 0,
+        tasks: new Map(),
+        nextTaskId: 1,
+        pendingTaskCreates: new Map(),
+        pendingTaskUpdates: new Map(),
         sessionName: 'my-feature-work',
       });
 

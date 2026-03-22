@@ -128,6 +128,9 @@ async function recordCostAndGetDailyImpl(
   const lastSeen = state.sessions[sessionId] ?? 0;
   const delta = Math.max(0, sessionCost - lastSeen);
 
+  // Skip save when nothing changed
+  if (delta === 0) return state.dailyTotal;
+
   state.dailyTotal += delta;
   state.sessions[sessionId] = sessionCost;
 

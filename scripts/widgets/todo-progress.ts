@@ -6,7 +6,7 @@
 import type { Widget } from './base.js';
 import type { WidgetContext, TodoProgressData } from '../types.js';
 import { colorize, getColorForPercent, getTheme } from '../utils/colors.js';
-import { parseTranscript, extractTodoOrTaskProgress } from '../utils/transcript-parser.js';
+import { getTranscript, extractTodoOrTaskProgress } from '../utils/transcript-parser.js';
 import { calculatePercent, truncate } from '../utils/formatters.js';
 
 export const todoProgressWidget: Widget<TodoProgressData> = {
@@ -14,15 +14,8 @@ export const todoProgressWidget: Widget<TodoProgressData> = {
   name: 'Todo Progress',
 
   async getData(ctx: WidgetContext): Promise<TodoProgressData | null> {
-    const transcriptPath = ctx.stdin.transcript_path;
-    if (!transcriptPath) {
-      return null;
-    }
-
-    const transcript = await parseTranscript(transcriptPath);
-    if (!transcript) {
-      return null;
-    }
+    const transcript = await getTranscript(ctx);
+    if (!transcript) return null;
 
     const progress = extractTodoOrTaskProgress(transcript);
 
