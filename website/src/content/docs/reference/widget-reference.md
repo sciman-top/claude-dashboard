@@ -188,11 +188,11 @@ abc12345-6789-0def-ghij-klmnopqrstuv
 |----------|-------|
 | **Widget ID** | `configCounts` |
 | **Data Source** | filesystem |
-| **Description** | Counts and displays the number of CLAUDE.md files, rules, MCP servers, and hooks configured in the project. |
+| **Description** | Counts and displays the number of CLAUDE.md files, AGENTS.md files, rules, MCP servers, and hooks configured in the project. |
 
 **Example output:**
 ```
-CLAUDE.md: 2 | rules: 3 | MCPs: 1 | hooks: 0
+CLAUDE.md: 2 | AGENTS.md: 1 | rules: 3 | MCPs: 1 | hooks: 0
 ```
 
 ## Activity Widgets

@@ -28,6 +28,7 @@
     "agent": "Agent",
     "todos": "Tasks",
     "claudeMd": "CLAUDE.md",
+    "agentsMd": "AGENTS.md",
     "rules": "Rules",
     "mcps": "MCP",
     "hooks": "Hooks",

@@ -33,7 +33,7 @@ claude-dashboard provides 31 widgets organized by category. Each widget can be i
 | `sessionName` | Session name from /rename command |
 | `sessionDuration` | Session duration |
 | `lastPrompt` | Last user prompt with timestamp |
-| `configCounts` | CLAUDE.md, rules, MCPs, hooks |
+| `configCounts` | CLAUDE.md, AGENTS.md, rules, MCPs, hooks |
 
 ## Activity
 

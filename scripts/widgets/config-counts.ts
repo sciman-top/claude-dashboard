@@ -64,6 +64,17 @@ async function countClaudeMd(projectDir: string): Promise<number> {
 }
 
 /**
+ * Count AGENTS.md files (project root and .claude/agents/)
+ */
+async function countAgentsMd(projectDir: string): Promise<number> {
+  const [root, agentFiles] = await Promise.all([
+    fileExists(join(projectDir, 'AGENTS.md')),
+    countFiles(join(projectDir, '.claude', 'agents'), /\.md$/),
+  ]);
+  return (root ? 1 : 0) + agentFiles;
+}
+
+/**
  * Count MCP server configurations from project and global configs.
  * Reads files directly and catches ENOENT (no TOCTOU).
  */
@@ -112,8 +123,9 @@ export const configCountsWidget: Widget<ConfigCountsData> = {
     const claudeDir = join(currentDir, '.claude');
 
     // Count all configs in parallel
-    const [claudeMd, rules, mcps, hooks] = await Promise.all([
+    const [claudeMd, agentsMd, rules, mcps, hooks] = await Promise.all([
       countClaudeMd(currentDir),
+      countAgentsMd(currentDir),
       countFiles(join(claudeDir, 'rules')),
       countMcps(currentDir),
       countFiles(join(claudeDir, 'hooks')),
@@ -121,9 +133,9 @@ export const configCountsWidget: Widget<ConfigCountsData> = {
 
     // Only show if there's something to display
     const data =
-      claudeMd === 0 && rules === 0 && mcps === 0 && hooks === 0
+      claudeMd === 0 && agentsMd === 0 && rules === 0 && mcps === 0 && hooks === 0
         ? null
-        : { claudeMd, rules, mcps, hooks };
+        : { claudeMd, agentsMd, rules, mcps, hooks };
 
     // Cache result
     configCountsCache = { projectDir: currentDir, data, timestamp: Date.now() };
@@ -137,6 +149,9 @@ export const configCountsWidget: Widget<ConfigCountsData> = {
 
     if (data.claudeMd > 0) {
       parts.push(`${t.widgets.claudeMd}: ${data.claudeMd}`);
+    }
+    if (data.agentsMd > 0) {
+      parts.push(`${t.widgets.agentsMd}: ${data.agentsMd}`);
     }
     if (data.rules > 0) {
       parts.push(`${t.widgets.rules}: ${data.rules}`);

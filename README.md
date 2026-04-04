@@ -67,7 +67,7 @@ Multi-provider support: z.ai/ZHIPU, Codex, Gemini auto-detected when installed.
 | | `sessionName` | Session name from /rename command |
 | | `sessionDuration` | Session duration |
 | | `lastPrompt` | Last user prompt with timestamp |
-| | `configCounts` | CLAUDE.md, rules, MCPs, hooks |
+| | `configCounts` | CLAUDE.md, AGENTS.md, rules, MCPs, hooks |
 | **Activity** | `toolActivity` | Running/completed tools with targets (e.g., `Read(app.ts)`) |
 | | `agentStatus` | Subagent progress |
 | | `todoProgress` | Todo completion rate |

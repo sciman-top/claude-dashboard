@@ -131,7 +131,7 @@ interface Widget<T extends WidgetData> {
 | `rateLimit7d` | API | 7-day rate limit (Max) |
 | `rateLimit7dSonnet` | API | 7-day Sonnet limit (Max) |
 | `projectInfo` | stdin + git | Directory + branch + ahead/behind (↑↓), subpath when CWD differs from project_dir, worktree indicator |
-| `configCounts` | filesystem | CLAUDE.md, rules, MCPs, hooks |
+| `configCounts` | filesystem | CLAUDE.md, AGENTS.md, rules, MCPs, hooks |
 | `sessionDuration` | file | Session duration |
 | `toolActivity` | transcript | Tool tracking with target display (e.g., `Read(app.ts)`, `Bash(npm test)`) |
 | `agentStatus` | transcript | Agent tracking |

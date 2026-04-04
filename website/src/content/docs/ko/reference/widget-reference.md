@@ -104,8 +104,8 @@ sidebar:
 
 - **ID**: `configCounts`
 - **데이터 소스**: 파일시스템
-- **표시 내용**: 프로젝트에 설정된 CLAUDE.md 파일 수, 규칙 수, MCP 서버 수, 훅 수.
-- **출력 예시**: `CLAUDE.md: 2 │ Rules: 3 │ MCPs: 1 │ Hooks: 2`
+- **표시 내용**: 프로젝트에 설정된 CLAUDE.md 파일 수, AGENTS.md 파일 수, 규칙 수, MCP 서버 수, 훅 수.
+- **출력 예시**: `CLAUDE.md: 2 │ AGENTS.md: 1 │ Rules: 3 │ MCPs: 1 │ Hooks: 2`
 
 ## Activity
 
