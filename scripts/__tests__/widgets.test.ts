@@ -26,6 +26,8 @@
  * @covers scripts/widgets/token-breakdown.ts
  * @covers scripts/widgets/zai-usage.ts
  * @covers scripts/widgets/last-prompt.ts
+ * @covers scripts/widgets/vim-mode.ts
+ * @covers scripts/widgets/api-duration.ts
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { modelWidget } from '../widgets/model.js';
@@ -54,6 +56,8 @@ import { performanceWidget } from '../widgets/performance.js';
 import { tokenBreakdownWidget } from '../widgets/token-breakdown.js';
 import { zaiUsageWidget } from '../widgets/zai-usage.js';
 import { lastPromptWidget } from '../widgets/last-prompt.js';
+import { vimModeWidget } from '../widgets/vim-mode.js';
+import { apiDurationWidget } from '../widgets/api-duration.js';
 import * as codexClient from '../utils/codex-client.js';
 import * as zaiClient from '../utils/zai-api-client.js';
 import * as historyParser from '../utils/history-parser.js';
@@ -1988,6 +1992,89 @@ describe('widgets', () => {
       const data = { text: longText, timestamp: '2024-01-01T12:30:00Z' };
       const result = lastPromptWidget.render(data, ctx);
       expect(result).toContain('…');
+    });
+  });
+
+  describe('vimModeWidget', () => {
+    it('should have correct id and name', () => {
+      expect(vimModeWidget.id).toBe('vimMode');
+      expect(vimModeWidget.name).toBe('Vim Mode');
+    });
+
+    it('should return null when vim is not enabled', async () => {
+      const ctx = createContext();
+      const data = await vimModeWidget.getData(ctx);
+      expect(data).toBeNull();
+    });
+
+    it('should return mode when vim is enabled', async () => {
+      const ctx = createContext({ vim: { mode: 'NORMAL' } });
+      const data = await vimModeWidget.getData(ctx);
+      expect(data).not.toBeNull();
+      expect(data?.mode).toBe('NORMAL');
+    });
+
+    it('should return INSERT mode', async () => {
+      const ctx = createContext({ vim: { mode: 'INSERT' } });
+      const data = await vimModeWidget.getData(ctx);
+      expect(data?.mode).toBe('INSERT');
+    });
+
+    it('should render NORMAL with dim color', () => {
+      const ctx = createContext();
+      const result = vimModeWidget.render({ mode: 'NORMAL' }, ctx);
+      expect(result).toContain('NORMAL');
+    });
+
+    it('should render INSERT with safe color', () => {
+      const ctx = createContext();
+      const result = vimModeWidget.render({ mode: 'INSERT' }, ctx);
+      expect(result).toContain('INSERT');
+    });
+  });
+
+  describe('apiDurationWidget', () => {
+    it('should have correct id and name', () => {
+      expect(apiDurationWidget.id).toBe('apiDuration');
+      expect(apiDurationWidget.name).toBe('API Duration');
+    });
+
+    it('should return null when duration data is missing', async () => {
+      const ctx = createContext({ cost: { total_cost_usd: 0.5 } });
+      const data = await apiDurationWidget.getData(ctx);
+      expect(data).toBeNull();
+    });
+
+    it('should return null when total_duration_ms is 0', async () => {
+      const ctx = createContext({
+        cost: { total_cost_usd: 0.5, total_duration_ms: 0, total_api_duration_ms: 100 },
+      });
+      const data = await apiDurationWidget.getData(ctx);
+      expect(data).toBeNull();
+    });
+
+    it('should calculate percentage correctly', async () => {
+      const ctx = createContext({
+        cost: { total_cost_usd: 0.5, total_duration_ms: 10000, total_api_duration_ms: 4500 },
+      });
+      const data = await apiDurationWidget.getData(ctx);
+      expect(data).not.toBeNull();
+      expect(data?.percentage).toBe(45);
+    });
+
+    it('should cap percentage at 100', async () => {
+      const ctx = createContext({
+        cost: { total_cost_usd: 0.5, total_duration_ms: 1000, total_api_duration_ms: 1500 },
+      });
+      const data = await apiDurationWidget.getData(ctx);
+      expect(data?.percentage).toBe(100);
+    });
+
+    it('should render with API prefix', () => {
+      const ctx = createContext();
+      const result = apiDurationWidget.render({ percentage: 45 }, ctx);
+      expect(result).toContain('API');
+      expect(result).toContain('45%');
     });
   });
 });

@@ -1,6 +1,8 @@
 /**
  * API Duration widget - shows percentage of session time spent waiting for API
+ * @handbook 3.1-widget-interface
  * @handbook 3.3-widget-data-sources
+ * @tested scripts/__tests__/widgets.test.ts
  */
 
 import type { Widget } from './base.js';
