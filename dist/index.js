@@ -810,6 +810,7 @@ var en_default = {
     agent: "Agent",
     todos: "Tasks",
     claudeMd: "CLAUDE.md",
+    agentsMd: "AGENTS.md",
     rules: "Rules",
     mcps: "MCP",
     hooks: "Hooks",
@@ -864,6 +865,7 @@ var ko_default = {
     agent: "\uC5D0\uC774\uC804\uD2B8",
     todos: "\uD560\uC77C",
     claudeMd: "CLAUDE.md",
+    agentsMd: "AGENTS.md",
     rules: "\uADDC\uCE59",
     mcps: "MCP",
     hooks: "\uD6C5",
@@ -1396,6 +1398,13 @@ async function countClaudeMd(projectDir) {
   ]);
   return (root ? 1 : 0) + (nested ? 1 : 0);
 }
+async function countAgentsMd(projectDir) {
+  const [root, agentFiles] = await Promise.all([
+    fileExists(join3(projectDir, "AGENTS.md")),
+    countFiles(join3(projectDir, ".claude", "agents"), /\.md$/)
+  ]);
+  return (root ? 1 : 0) + agentFiles;
+}
 async function countMcps(projectDir) {
   const homeDir = process.env.HOME || "";
   const mcpPaths = [
@@ -1428,13 +1437,14 @@ var configCountsWidget = {
       return configCountsCache.data;
     }
     const claudeDir = join3(currentDir, ".claude");
-    const [claudeMd, rules, mcps, hooks] = await Promise.all([
+    const [claudeMd, agentsMd, rules, mcps, hooks] = await Promise.all([
       countClaudeMd(currentDir),
+      countAgentsMd(currentDir),
       countFiles(join3(claudeDir, "rules")),
       countMcps(currentDir),
       countFiles(join3(claudeDir, "hooks"))
     ]);
-    const data = claudeMd === 0 && rules === 0 && mcps === 0 && hooks === 0 ? null : { claudeMd, rules, mcps, hooks };
+    const data = claudeMd === 0 && agentsMd === 0 && rules === 0 && mcps === 0 && hooks === 0 ? null : { claudeMd, agentsMd, rules, mcps, hooks };
     configCountsCache = { projectDir: currentDir, data, timestamp: Date.now() };
     return data;
   },
@@ -1443,6 +1453,9 @@ var configCountsWidget = {
     const parts = [];
     if (data.claudeMd > 0) {
       parts.push(`${t.widgets.claudeMd}: ${data.claudeMd}`);
+    }
+    if (data.agentsMd > 0) {
+      parts.push(`${t.widgets.agentsMd}: ${data.agentsMd}`);
     }
     if (data.rules > 0) {
       parts.push(`${t.widgets.rules}: ${data.rules}`);
@@ -1604,7 +1617,7 @@ var cachedTranscript = null;
 function createParsedTranscript() {
   return {
     toolUses: /* @__PURE__ */ new Map(),
-    toolResults: /* @__PURE__ */ new Set(),
+    completedToolCount: 0,
     runningToolIds: /* @__PURE__ */ new Set(),
     lastTodoWriteInput: null,
     activeAgentIds: /* @__PURE__ */ new Set(),
@@ -1674,7 +1687,7 @@ function processEntries(entries, existing) {
     if (entry.type === "user" && entry.message?.content) {
       for (const block of entry.message.content) {
         if (block.type === "tool_result" && block.tool_use_id) {
-          existing.toolResults.add(block.tool_use_id);
+          existing.completedToolCount++;
           existing.runningToolIds.delete(block.tool_use_id);
           if (existing.activeAgentIds.delete(block.tool_use_id)) {
             existing.completedAgentCount++;
@@ -1702,6 +1715,7 @@ function processEntries(entries, existing) {
             }
             existing.pendingTaskUpdates.delete(block.tool_use_id);
           }
+          existing.toolUses.delete(block.tool_use_id);
         }
       }
     }
@@ -1775,7 +1789,7 @@ function getRunningTools(transcript) {
   return running;
 }
 function getCompletedToolCount(transcript) {
-  return transcript.toolResults.size;
+  return transcript.completedToolCount;
 }
 function normalizeTaskStatus(status) {
   switch (status) {
@@ -3382,6 +3396,8 @@ var sessionNameWidget = {
   id: "sessionName",
   name: "Session Name",
   async getData(ctx) {
+    if (ctx.stdin.session_name)
+      return { name: ctx.stdin.session_name };
     const transcript = await getTranscript(ctx);
     if (!transcript?.sessionName)
       return null;
