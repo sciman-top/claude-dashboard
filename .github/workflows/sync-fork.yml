@@ -8,10 +8,29 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Safety check — compare file counts
+        run: |
+          git remote add upstream ${{ github.event.repository.parent.clone_url }}
+          git fetch upstream ${{ github.event.repository.default_branch }}
+          FORK_FILES=$(git ls-tree -r --name-only HEAD | wc -l)
+          UPSTREAM_FILES=$(git ls-tree -r --name-only upstream/${{ github.event.repository.default_branch }} | wc -l)
+          echo "Fork files: $FORK_FILES"
+          echo "Upstream files: $UPSTREAM_FILES"
+          if [ "$UPSTREAM_FILES" -lt "$(echo "$FORK_FILES * 0.5 / 1" | bc)" ]; then
+            echo "::error::SAFETY ABORT: Upstream has $UPSTREAM_FILES files vs fork's $FORK_FILES. Possible upstream deletion. Sync skipped."
+            exit 1
+          fi
+          echo "Safety check passed."
+
       - name: Sync upstream changes
         uses: tgymnich/fork-sync@v1.9
         with:
           owner: sciman-top
           token: ${{ secrets.GITHUB_TOKEN }}
-          base: main
-          head: main
+          base: ${{ github.event.repository.default_branch }}
+          head: ${{ github.event.repository.default_branch }}
