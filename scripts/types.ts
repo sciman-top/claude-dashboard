@@ -134,7 +134,8 @@ export type WidgetId =
   | 'todayCost'
   | 'lastPrompt'
   | 'vimMode'
-  | 'apiDuration';
+  | 'apiDuration'
+  | 'peakHours';
 
 /**
  * Display mode for status line output
@@ -146,7 +147,7 @@ export type DisplayMode = 'compact' | 'normal' | 'detailed' | 'custom';
  *
  * compact: Essential metrics - 1 line
  * normal: Essential + project/session/todo - 2 lines
- * detailed: Normal + config/tools/agents (additive) - 5 lines
+ * detailed: Normal + config/tools/agents (additive) - 6 lines
  */
 export const DISPLAY_PRESETS: Record<Exclude<DisplayMode, 'custom'>, WidgetId[][]> = {
   compact: [
@@ -161,7 +162,7 @@ export const DISPLAY_PRESETS: Record<Exclude<DisplayMode, 'custom'>, WidgetId[][
     ['projectInfo', 'sessionName', 'sessionId', 'sessionDuration', 'burnRate', 'tokenSpeed', 'depletionTime', 'todoProgress'],
     ['configCounts', 'toolActivity', 'agentStatus', 'cacheHit', 'performance'],
     ['tokenBreakdown', 'forecast', 'budget', 'todayCost'],
-    ['codexUsage', 'geminiUsage', 'linesChanged', 'outputStyle', 'version'],
+    ['codexUsage', 'geminiUsage', 'linesChanged', 'outputStyle', 'version', 'peakHours'],
     ['lastPrompt'],
   ],
 };
@@ -243,6 +244,7 @@ export const PRESET_CHAR_MAP: Record<string, WidgetId> = {
   '?': 'lastPrompt',
   m: 'vimMode',
   a: 'apiDuration',
+  p: 'peakHours',
 };
 
 /**
@@ -320,6 +322,8 @@ export interface Translations {
     tokenBreakdown: string;
     todayCost: string;
     apiDuration: string;
+    peakHours: string;
+    offPeak: string;
   };
   /** Check-usage command labels */
   checkUsage: {
@@ -705,6 +709,16 @@ export interface LastPromptData {
 }
 
 /**
+ * Peak hours data - whether currently in Anthropic API peak hours window
+ */
+export interface PeakHoursData {
+  /** Whether currently in peak hours */
+  isPeak: boolean;
+  /** Minutes until next transition (peak→off-peak or off-peak→peak) */
+  minutesToTransition: number;
+}
+
+/**
  * Union type of all widget data
  */
 export type WidgetData =
@@ -738,7 +752,8 @@ export type WidgetData =
   | TodayCostData
   | LastPromptData
   | VimModeData
-  | ApiDurationData;
+  | ApiDurationData
+  | PeakHoursData;
 
 /**
  * Transcript entry from JSONL file
