@@ -67,6 +67,29 @@ jobs:
           git branch -f "$BACKUP_BRANCH" HEAD
           git push origin "$BACKUP_BRANCH" --force
 
+      - name: Diff guard — inspect deletions
+        if: steps.upstream.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          FORK_FILES=$(git ls-tree -r --name-only HEAD | wc -l | tr -d '[:space:]')
+          COMPARE_JSON=$(gh api "repos/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${{ steps.upstream.outputs.full_name }}:${{ steps.upstream.outputs.branch }}")
+          TOTAL_DELETIONS=$(printf '%s' "$COMPARE_JSON" | jq -r '.total_deletions // 0')
+          DELETED_FILES=$(printf '%s' "$COMPARE_JSON" | jq -r '.files[]? | select(.status == "removed") | .filename')
+          DELETE_LIMIT=$(( 5 + (FORK_FILES / 10) ))
+          echo "Total deletions: $TOTAL_DELETIONS"
+          echo "Deletion limit: $DELETE_LIMIT"
+          if [ "$TOTAL_DELETIONS" -gt "$DELETE_LIMIT" ]; then
+            echo "::error::SAFETY ABORT: deletion volume is too large for a safe sync."
+            exit 1
+          fi
+          if printf '%s
+' "$DELETED_FILES" | grep -Eq '^(\.github/|README\.md$|LICENSE$|sync-fork\.yml$)'; then
+            echo "::error::SAFETY ABORT: critical path deletion detected."
+            exit 1
+          fi
+
       - name: Merge upstream changes
         if: steps.upstream.outputs.skip != 'true'
         env:
