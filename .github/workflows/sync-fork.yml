@@ -17,29 +17,59 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.SYNC_PAT }}
 
-      - name: Safety check — compare file counts
+      - name: Resolve upstream
+        id: upstream
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          UPSTREAM_URL=$(gh api repos/${{ github.repository }} --jq '.parent.clone_url')
-          if [ -z "$UPSTREAM_URL" ]; then
-            echo "::error::Cannot determine upstream repo. Not a fork or parent deleted."
-            exit 1
+          set -euo pipefail
+          UPSTREAM_FULL_NAME=$(gh api repos/${{ github.repository }} --jq '.parent.full_name // empty')
+          if [ -z "$UPSTREAM_FULL_NAME" ]; then
+            echo "::warning::Upstream repo metadata is missing. Sync skipped to preserve fork."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          git remote add upstream "$UPSTREAM_URL"
-          git fetch upstream ${{ github.event.repository.default_branch }}
-          FORK_FILES=$(git ls-tree -r --name-only HEAD | wc -l)
-          UPSTREAM_FILES=$(git ls-tree -r --name-only upstream/${{ github.event.repository.default_branch }} | wc -l)
+          if ! gh api "repos/$UPSTREAM_FULL_NAME" >/dev/null 2>&1; then
+            echo "::warning::Upstream repo $UPSTREAM_FULL_NAME is unavailable or deleted. Sync skipped to preserve fork."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          UPSTREAM_BRANCH=$(gh api "repos/$UPSTREAM_FULL_NAME" --jq '.default_branch // empty')
+          UPSTREAM_URL=$(gh api "repos/$UPSTREAM_FULL_NAME" --jq '.clone_url')
+          echo "full_name=$UPSTREAM_FULL_NAME" >> "$GITHUB_OUTPUT"
+          echo "branch=$UPSTREAM_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "url=$UPSTREAM_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Safety check — compare file counts
+        if: steps.upstream.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          git remote add upstream "${{ steps.upstream.outputs.url }}"
+          git fetch upstream "${{ steps.upstream.outputs.branch }}"
+          FORK_FILES=$(git ls-tree -r --name-only HEAD | wc -l | tr -d '[:space:]')
+          UPSTREAM_FILES=$(git ls-tree -r --name-only "upstream/${{ steps.upstream.outputs.branch }}" | wc -l | tr -d '[:space:]')
+          THRESHOLD=$(( (FORK_FILES + 1) / 2 ))
           echo "Fork files: $FORK_FILES"
           echo "Upstream files: $UPSTREAM_FILES"
-          if [ "$UPSTREAM_FILES" -lt "$(echo "$FORK_FILES * 0.5 / 1" | bc)" ]; then
+          if [ "$UPSTREAM_FILES" -lt "$THRESHOLD" ]; then
             echo "::error::SAFETY ABORT: Upstream has $UPSTREAM_FILES files vs fork's $FORK_FILES. Possible upstream deletion. Sync skipped."
             exit 1
           fi
           echo "Safety check passed."
 
+      - name: Create restore point
+        if: steps.upstream.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          BACKUP_BRANCH="backup/pre-sync"
+          git branch -f "$BACKUP_BRANCH" HEAD
+          git push origin "$BACKUP_BRANCH" --force
+
       - name: Merge upstream changes
+        if: steps.upstream.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          gh api repos/${{ github.repository }}/merge-upstream             -X POST             -f branch=${{ github.event.repository.default_branch }}
+          gh api repos/${{ github.repository }}/merge-upstream             -X POST             -f branch=${{ steps.upstream.outputs.branch }}
