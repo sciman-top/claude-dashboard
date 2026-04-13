@@ -40,7 +40,7 @@ jobs:
           echo "branch=$UPSTREAM_BRANCH" >> "$GITHUB_OUTPUT"
           echo "url=$UPSTREAM_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Safety check — compare file counts
+      - name: Safety check - compare file counts
         if: steps.upstream.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
@@ -67,7 +67,7 @@ jobs:
           git branch -f "$BACKUP_BRANCH" HEAD
           git push origin "$BACKUP_BRANCH" --force
 
-      - name: Diff guard — inspect deletions
+      - name: Diff guard - inspect deletions
         if: steps.upstream.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
@@ -84,8 +84,7 @@ jobs:
             echo "::error::SAFETY ABORT: deletion volume is too large for a safe sync."
             exit 1
           fi
-          if printf '%s
-' "$DELETED_FILES" | grep -Eq '^(\.github/|README\.md$|LICENSE$|sync-fork\.yml$)'; then
+          if printf '%s\n' "$DELETED_FILES" | grep -Eq '^(\.github/|README\.md$|LICENSE$|sync-fork\.yml$)'; then
             echo "::error::SAFETY ABORT: critical path deletion detected."
             exit 1
           fi
@@ -95,4 +94,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          gh api repos/${{ github.repository }}/merge-upstream             -X POST             -f branch=${{ steps.upstream.outputs.branch }}
+          gh api repos/${{ github.repository }}/merge-upstream -X POST -f branch=${{ steps.upstream.outputs.branch }}
