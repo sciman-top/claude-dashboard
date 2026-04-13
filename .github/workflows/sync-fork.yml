@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   sync:
@@ -38,10 +37,9 @@ jobs:
           fi
           echo "Safety check passed."
 
-      - name: Sync upstream changes
-        uses: tgymnich/fork-sync@v1.9
-        with:
-          owner: sciman-top
-          token: ${{ secrets.GITHUB_TOKEN }}
-          base: ${{ github.event.repository.default_branch }}
-          head: ${{ github.event.repository.default_branch }}
+      - name: Merge upstream changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git merge upstream/${{ github.event.repository.default_branch }} --no-edit
+          git push origin ${{ github.event.repository.default_branch }}
