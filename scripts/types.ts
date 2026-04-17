@@ -204,8 +204,8 @@ export interface Config {
   /** Daily budget limit in USD. Enables budget tracking widget. */
   dailyBudget?: number;
   /**
-   * Glob patterns for tagStatus widget. Each matches at most one tag via
-   * `git describe --tags --abbrev=0 --match <pattern>`. Defaults to ['v*'].
+   * Glob patterns for tagStatus widget. Each pattern resolves to at most one
+   * tag (the most recent reachable from HEAD). Defaults to ['v*'].
    */
   tagPatterns?: string[];
   cache: {

@@ -1470,10 +1470,8 @@ describe('widgets', () => {
     function tagCtx(config: Partial<WidgetContext['config']> = {}): WidgetContext {
       testCwd++;
       return {
-        stdin: createStdin({ workspace: { current_dir: `/test/tag-status-${testCwd}` } }),
+        ...createContext({ workspace: { current_dir: `/test/tag-status-${testCwd}` } }),
         config: { ...MOCK_CONFIG, ...config },
-        translations: MOCK_TRANSLATIONS,
-        rateLimits: null,
       };
     }
 
@@ -1563,14 +1561,9 @@ describe('widgets', () => {
     });
 
     it('should return null when cwd is missing', async () => {
-      const ctx: WidgetContext = {
-        stdin: createStdin({ workspace: { current_dir: '' } }),
-        config: MOCK_CONFIG,
-        translations: MOCK_TRANSLATIONS,
-        rateLimits: null,
-      };
-
-      const data = await tagStatusWidget.getData(ctx);
+      const data = await tagStatusWidget.getData(
+        createContext({ workspace: { current_dir: '' } }),
+      );
       expect(data).toBeNull();
     });
 

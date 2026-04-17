@@ -1,8 +1,7 @@
 /**
- * Tag status widget - distance (commits ahead) from matched git tags.
- * Supports multiple glob patterns via config.tagPatterns (default: ['v*']).
- * Each pattern resolves to at most one tag via `git describe --abbrev=0`.
+ * Tag status widget - commits ahead of each matched git tag.
  * @handbook 3.3-widget-data-sources
+ * @tested scripts/__tests__/widgets.test.ts
  */
 
 import type { Widget } from './base.js';
