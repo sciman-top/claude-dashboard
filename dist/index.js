@@ -1038,9 +1038,16 @@ var EFFORT_LEVELS = /* @__PURE__ */ new Set(["xhigh", "high", "medium", "low"]);
 function isEffortLevel(value) {
   return typeof value === "string" && EFFORT_LEVELS.has(value);
 }
+function getDefaultEffort(modelId) {
+  if (modelId.includes("opus"))
+    return "xhigh";
+  if (modelId.includes("sonnet"))
+    return "medium";
+  return "high";
+}
 var settingsCache = null;
-async function getModelSettings() {
-  const defaultEffort = "high";
+async function getModelSettings(modelId) {
+  const defaultEffort = getDefaultEffort(modelId);
   const settingsPath = join2(homedir2(), ".claude", "settings.json");
   try {
     const fileStat = await stat3(settingsPath);
@@ -1073,7 +1080,8 @@ var modelWidget = {
   name: "Model",
   async getData(ctx) {
     const { model } = ctx.stdin;
-    const { effortLevel, fastMode } = await getModelSettings();
+    const modelId = model?.id || "";
+    const { effortLevel, fastMode } = await getModelSettings(modelId);
     return {
       id: model?.id || "",
       displayName: model?.display_name || "-",
