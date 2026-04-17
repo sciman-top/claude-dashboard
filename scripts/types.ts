@@ -135,7 +135,8 @@ export type WidgetId =
   | 'lastPrompt'
   | 'vimMode'
   | 'apiDuration'
-  | 'peakHours';
+  | 'peakHours'
+  | 'tagStatus';
 
 /**
  * Display mode for status line output
@@ -202,6 +203,11 @@ export interface Config {
   preset?: string;
   /** Daily budget limit in USD. Enables budget tracking widget. */
   dailyBudget?: number;
+  /**
+   * Glob patterns for tagStatus widget. Each pattern resolves to at most one
+   * tag (the most recent reachable from HEAD). Defaults to ['v*'].
+   */
+  tagPatterns?: string[];
   cache: {
     ttlSeconds: number;
   };
@@ -245,6 +251,7 @@ export const PRESET_CHAR_MAP: Record<string, WidgetId> = {
   m: 'vimMode',
   a: 'apiDuration',
   p: 'peakHours',
+  t: 'tagStatus',
 };
 
 /**
@@ -385,7 +392,7 @@ export interface WidgetContext {
 /**
  * Widget data types for each widget
  */
-export type EffortLevel = 'high' | 'medium' | 'low';
+export type EffortLevel = 'xhigh' | 'high' | 'medium' | 'low';
 
 export interface ModelData {
   id: string;
@@ -425,6 +432,14 @@ export interface ProjectInfoData {
   worktreeName?: string;
   /** Git remote HTTPS URL for OSC8 hyperlink (includes /tree/{branch}) */
   remoteUrl?: string;
+}
+
+/**
+ * Tag status data - distance (commits ahead) from each matched tag.
+ * Patterns with no matching tag are omitted; widget hidden when empty.
+ */
+export interface TagStatusData {
+  tags: Array<{ name: string; count: number }>;
 }
 
 export interface ConfigCountsData {
@@ -753,7 +768,8 @@ export type WidgetData =
   | LastPromptData
   | VimModeData
   | ApiDurationData
-  | PeakHoursData;
+  | PeakHoursData
+  | TagStatusData;
 
 /**
  * Transcript entry from JSONL file
