@@ -28,14 +28,10 @@ interface ModelSettings {
   fastMode: boolean;
 }
 
-function getDefaultEffort(): EffortLevel {
-  return 'high';
-}
-
 let settingsCache: { rawEffort: unknown; fastMode: boolean; mtime: number } | null = null;
 
 async function getModelSettings(): Promise<ModelSettings> {
-  const defaultEffort = getDefaultEffort();
+  const defaultEffort: EffortLevel = 'high';
   const settingsPath = join(homedir(), '.claude', 'settings.json');
 
   try {

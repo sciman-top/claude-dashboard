@@ -1613,6 +1613,21 @@ describe('widgets', () => {
       expect(result).toContain('sync-handbook');
       expect(result).toContain('+3');
     });
+
+    it('should reuse cached result within TTL on repeated calls', async () => {
+      const spy = vi.spyOn(gitUtils, 'execGit').mockImplementation(async (args: string[]) => {
+        if (args[0] === 'describe') return 'v1.25.1\n';
+        if (args[0] === 'rev-list') return '0\n';
+        return '';
+      });
+
+      const ctx = tagCtx();
+      const first = await tagStatusWidget.getData(ctx);
+      const second = await tagStatusWidget.getData(ctx);
+
+      expect(first).toEqual(second);
+      expect(spy).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('outputStyleWidget', () => {
