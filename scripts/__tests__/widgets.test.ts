@@ -1481,7 +1481,7 @@ describe('widgets', () => {
       vi.restoreAllMocks();
     });
 
-    // Each test uses a unique cwd to bypass the 30s TTL cache
+    // Each test's ctx gets a unique cwd to isolate from other tests' cache state
     let testCwd = 0;
     function tagCtx(config: Partial<WidgetContext['config']> = {}): WidgetContext {
       testCwd++;
@@ -1614,7 +1614,7 @@ describe('widgets', () => {
       expect(result).toContain('+3');
     });
 
-    it('should reuse cached result within TTL on repeated calls', async () => {
+    it('should reuse cached result on repeated calls with same ctx', async () => {
       const spy = vi.spyOn(gitUtils, 'execGit').mockImplementation(async (args: string[]) => {
         if (args[0] === 'describe') return 'v1.25.1\n';
         if (args[0] === 'rev-list') return '0\n';
@@ -1623,10 +1623,11 @@ describe('widgets', () => {
 
       const ctx = tagCtx();
       const first = await tagStatusWidget.getData(ctx);
+      const callsAfterFirst = spy.mock.calls.length;
       const second = await tagStatusWidget.getData(ctx);
 
       expect(first).toEqual(second);
-      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy.mock.calls.length).toBe(callsAfterFirst);
     });
   });
 
