@@ -29,9 +29,9 @@ Running `/claude-dashboard:setup` without arguments launches interactive mode, w
 | Feature | Max | Pro |
 |---------|-----|-----|
 | 5h rate limit + countdown | Yes | Yes |
-| 7d all models | Yes | No |
+| 7d all models | Yes | Yes |
 
-Pro plan users will not see the 7-day rate limit widgets (`rateLimit7d`, `rateLimit7dSonnet`), as these limits only apply to the Max plan.
+Pro plan users will not see the 7-day Sonnet rate limit widget (`rateLimit7dSonnet`), as Sonnet-specific quota buckets only apply to the Max plan. The `rateLimit7d` widget is available for both Pro and Max plans.
 
 ## Configuration File
 
@@ -83,6 +83,18 @@ Set a daily budget limit in USD to track your spending:
 ```
 
 The `budget` widget shows daily spending versus your configured limit. Warning indicators appear at 80% usage and critical alerts at 95%.
+
+## Tag Status Patterns
+
+The `tagStatus` widget shows commits ahead of each matched git tag. Configure which tags to track via `tagPatterns`:
+
+```json
+{
+  "tagPatterns": ["v*", "release-*"]
+}
+```
+
+Each glob pattern resolves to at most one tag — the most recent one reachable from `HEAD`. The default is `["v*"]`. The widget auto-hides when no pattern matches a reachable tag.
 
 ## Widget Toggle
 

@@ -20,12 +20,15 @@ var DISPLAY_PRESETS = {
     ["configCounts", "toolActivity", "agentStatus", "cacheHit", "performance"],
     ["tokenBreakdown", "forecast", "budget", "todayCost"],
     ["codexUsage", "geminiUsage", "linesChanged", "outputStyle", "version", "peakHours"],
-    ["lastPrompt"]
+    ["lastPrompt", "vimMode", "apiDuration", "tagStatus"]
   ]
 };
 var PRESET_CHAR_MAP = {
   M: "model",
   C: "context",
+  b: "contextBar",
+  "%": "contextPercentage",
+  "#": "contextUsage",
   $: "cost",
   R: "rateLimit5h",
   "7": "rateLimit7d",
@@ -56,7 +59,8 @@ var PRESET_CHAR_MAP = {
   "?": "lastPrompt",
   m: "vimMode",
   a: "apiDuration",
-  p: "peakHours"
+  p: "peakHours",
+  t: "tagStatus"
 };
 function parsePreset(preset) {
   return preset.split("|").map(
@@ -176,6 +180,43 @@ var THEMES = {
     cyan: "\x1B[38;2;148;226;213m",
     white: "\x1B[38;2;205;214;244m",
     gray: "\x1B[38;2;127;132;156m"
+  },
+  catppuccinLatte: {
+    dim: "\x1B[2m",
+    bold: "\x1B[1m",
+    model: "\x1B[38;2;30;102;245m",
+    // #1e66f5 blue
+    folder: "\x1B[38;2;223;142;29m",
+    // #df8e1d yellow
+    branch: "\x1B[38;2;234;118;203m",
+    // #ea76cb pink
+    safe: "\x1B[38;2;64;160;43m",
+    // #40a02b green
+    warning: "\x1B[38;2;254;100;11m",
+    // #fe640b peach
+    danger: "\x1B[38;2;210;15;57m",
+    // #d20f39 red
+    secondary: "\x1B[38;2;140;143;161m",
+    // #8c8fa1 overlay1
+    accent: "\x1B[38;2;254;100;11m",
+    // #fe640b peach
+    info: "\x1B[38;2;32;159;181m",
+    // #209fb5 sapphire
+    barFilled: "\x1B[38;2;64;160;43m",
+    // #40a02b green
+    barEmpty: "\x1B[38;2;188;192;204m",
+    // #bcc0cc surface1
+    red: "\x1B[38;2;210;15;57m",
+    green: "\x1B[38;2;64;160;43m",
+    yellow: "\x1B[38;2;223;142;29m",
+    blue: "\x1B[38;2;30;102;245m",
+    magenta: "\x1B[38;2;136;57;239m",
+    // #8839ef mauve
+    cyan: "\x1B[38;2;23;146;153m",
+    // #179299 teal
+    white: "\x1B[38;2;76;79;105m",
+    // #4c4f69 text
+    gray: "\x1B[38;2;140;143;161m"
   },
   gruvbox: {
     dim: "\x1B[2m",
@@ -497,7 +538,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.25.0";
+var VERSION = "1.26.0";
 
 // scripts/utils/debug.ts
 var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
@@ -1033,12 +1074,14 @@ function getZaiApiBaseUrl() {
 }
 
 // scripts/widgets/model.ts
-var EFFORT_LEVELS = /* @__PURE__ */ new Set(["high", "medium", "low"]);
+var EFFORT_LEVELS = /* @__PURE__ */ new Set(["xhigh", "high", "medium", "low"]);
 function isEffortLevel(value) {
   return typeof value === "string" && EFFORT_LEVELS.has(value);
 }
 function getDefaultEffort(modelId) {
-  if (modelId.includes("opus-4-6") || modelId.includes("sonnet-4-6"))
+  if (modelId.includes("opus"))
+    return "xhigh";
+  if (modelId.includes("sonnet"))
     return "medium";
   return "high";
 }
@@ -1115,45 +1158,66 @@ function renderProgressBar(percent, config = DEFAULT_PROGRESS_BAR_CONFIG) {
 }
 
 // scripts/widgets/context.ts
+async function getContextData(ctx) {
+  const { context_window } = ctx.stdin;
+  const usage = context_window?.current_usage;
+  const contextSize = context_window?.context_window_size || 2e5;
+  const officialPercent = context_window?.used_percentage;
+  if (!usage) {
+    return {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      contextSize,
+      percentage: typeof officialPercent === "number" ? Math.round(officialPercent) : 0
+    };
+  }
+  const inputTokens = usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
+  const outputTokens = usage.output_tokens;
+  const totalTokens = inputTokens + outputTokens;
+  const percentage = typeof officialPercent === "number" ? Math.round(officialPercent) : calculatePercent(inputTokens, contextSize);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    contextSize,
+    percentage
+  };
+}
+function renderBar(data) {
+  return renderProgressBar(data.percentage);
+}
+function renderPercentage(data) {
+  return colorize(`${data.percentage}%`, getColorForPercent(data.percentage));
+}
+function renderUsage(data) {
+  return `${formatTokens(data.inputTokens)}/${formatTokens(data.contextSize)}`;
+}
 var contextWidget = {
   id: "context",
   name: "Context",
-  async getData(ctx) {
-    const { context_window } = ctx.stdin;
-    const usage = context_window?.current_usage;
-    const contextSize = context_window?.context_window_size || 2e5;
-    const officialPercent = context_window?.used_percentage;
-    if (!usage) {
-      return {
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        contextSize,
-        percentage: typeof officialPercent === "number" ? Math.round(officialPercent) : 0
-      };
-    }
-    const inputTokens = usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
-    const outputTokens = usage.output_tokens;
-    const totalTokens = inputTokens + outputTokens;
-    const percentage = typeof officialPercent === "number" ? Math.round(officialPercent) : calculatePercent(inputTokens, contextSize);
-    return {
-      inputTokens,
-      outputTokens,
-      totalTokens,
-      contextSize,
-      percentage
-    };
-  },
-  render(data, _ctx) {
-    const parts = [];
-    parts.push(renderProgressBar(data.percentage));
-    const percentColor = getColorForPercent(data.percentage);
-    parts.push(colorize(`${data.percentage}%`, percentColor));
-    parts.push(
-      `${formatTokens(data.inputTokens)}/${formatTokens(data.contextSize)}`
-    );
-    return parts.join(getSeparator());
+  getData: getContextData,
+  render(data) {
+    return [renderBar(data), renderPercentage(data), renderUsage(data)].join(getSeparator());
   }
+};
+var contextBarWidget = {
+  id: "contextBar",
+  name: "Context (Bar)",
+  getData: getContextData,
+  render: renderBar
+};
+var contextPercentageWidget = {
+  id: "contextPercentage",
+  name: "Context (Percentage)",
+  getData: getContextData,
+  render: renderPercentage
+};
+var contextUsageWidget = {
+  id: "contextUsage",
+  name: "Context (Usage)",
+  getData: getContextData,
+  render: renderUsage
 };
 
 // scripts/widgets/cost.ts
@@ -1213,8 +1277,6 @@ var rateLimit7dWidget = {
   name: "7d Rate Limit",
   async getData(ctx) {
     if (shouldHideAnthropicLimits())
-      return null;
-    if (ctx.config.plan !== "max")
       return null;
     return getLimitData(ctx.rateLimits, "seven_day");
   },
@@ -3647,10 +3709,67 @@ var peakHoursWidget = {
   }
 };
 
+// scripts/widgets/tag-status.ts
+var TAG_CACHE_TTL_MS = 3e4;
+var tagCache = null;
+async function resolveTag(pattern, cwd) {
+  try {
+    const described = (await execGit(
+      ["describe", "--tags", "--abbrev=0", "--match", pattern, "HEAD"],
+      cwd,
+      500
+    )).trim();
+    if (!described)
+      return null;
+    const countStr = (await execGit(["rev-list", "--count", `${described}..HEAD`], cwd, 500)).trim();
+    const count = parseInt(countStr, 10);
+    return { name: described, count: Number.isFinite(count) ? count : 0 };
+  } catch {
+    return null;
+  }
+}
+var tagStatusWidget = {
+  id: "tagStatus",
+  name: "Tag Status",
+  async getData(ctx) {
+    const cwd = ctx.stdin.workspace?.current_dir;
+    if (!cwd)
+      return null;
+    const patterns = ctx.config.tagPatterns ?? ["v*"];
+    if (patterns.length === 0)
+      return null;
+    const key = patterns.join("|");
+    if (tagCache?.cwd === cwd && tagCache.key === key && Date.now() - tagCache.timestamp < TAG_CACHE_TTL_MS) {
+      return tagCache.data;
+    }
+    const resolved = await Promise.all(patterns.map((p) => resolveTag(p, cwd)));
+    const tags = resolved.filter(
+      (r) => r !== null
+    );
+    const data = tags.length > 0 ? { tags } : null;
+    tagCache = { cwd, key, data, timestamp: Date.now() };
+    return data;
+  },
+  render(data, _ctx) {
+    const theme = getTheme();
+    const icon = colorize("\u{1F3F7}", theme.info);
+    const parts = data.tags.map(({ name, count }) => {
+      const nameColored = colorize(name, theme.branch);
+      if (count === 0)
+        return nameColored;
+      return `${nameColored}${colorize(`+${count}`, theme.warning)}`;
+    });
+    return `${icon} ${parts.join(" ")}`;
+  }
+};
+
 // scripts/widgets/index.ts
 var widgetRegistry = /* @__PURE__ */ new Map([
   ["model", modelWidget],
   ["context", contextWidget],
+  ["contextBar", contextBarWidget],
+  ["contextPercentage", contextPercentageWidget],
+  ["contextUsage", contextUsageWidget],
   ["cost", costWidget],
   ["rateLimit5h", rateLimit5hWidget],
   ["rateLimit7d", rateLimit7dWidget],
@@ -3683,7 +3802,8 @@ var widgetRegistry = /* @__PURE__ */ new Map([
   ["lastPrompt", lastPromptWidget],
   ["vimMode", vimModeWidget],
   ["apiDuration", apiDurationWidget],
-  ["peakHours", peakHoursWidget]
+  ["peakHours", peakHoursWidget],
+  ["tagStatus", tagStatusWidget]
 ]);
 function getWidget(id) {
   return widgetRegistry.get(id);

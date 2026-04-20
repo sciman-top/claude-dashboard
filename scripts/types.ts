@@ -103,6 +103,9 @@ export interface StdinInput {
 export type WidgetId =
   | 'model'
   | 'context'
+  | 'contextBar'
+  | 'contextPercentage'
+  | 'contextUsage'
   | 'cost'
   | 'rateLimit5h'
   | 'rateLimit7d'
@@ -135,7 +138,8 @@ export type WidgetId =
   | 'lastPrompt'
   | 'vimMode'
   | 'apiDuration'
-  | 'peakHours';
+  | 'peakHours'
+  | 'tagStatus';
 
 /**
  * Display mode for status line output
@@ -163,14 +167,14 @@ export const DISPLAY_PRESETS: Record<Exclude<DisplayMode, 'custom'>, WidgetId[][
     ['configCounts', 'toolActivity', 'agentStatus', 'cacheHit', 'performance'],
     ['tokenBreakdown', 'forecast', 'budget', 'todayCost'],
     ['codexUsage', 'geminiUsage', 'linesChanged', 'outputStyle', 'version', 'peakHours'],
-    ['lastPrompt'],
+    ['lastPrompt', 'vimMode', 'apiDuration', 'tagStatus'],
   ],
 };
 
 /**
  * Theme identifiers
  */
-export type ThemeId = 'default' | 'minimal' | 'catppuccin' | 'dracula' | 'gruvbox' | 'nord' | 'tokyoNight' | 'solarized';
+export type ThemeId = 'default' | 'minimal' | 'catppuccin' | 'catppuccinLatte' | 'dracula' | 'gruvbox' | 'nord' | 'tokyoNight' | 'solarized';
 
 /**
  * Separator styles for widget dividers
@@ -202,6 +206,11 @@ export interface Config {
   preset?: string;
   /** Daily budget limit in USD. Enables budget tracking widget. */
   dailyBudget?: number;
+  /**
+   * Glob patterns for tagStatus widget. Each pattern resolves to at most one
+   * tag (the most recent reachable from HEAD). Defaults to ['v*'].
+   */
+  tagPatterns?: string[];
   cache: {
     ttlSeconds: number;
   };
@@ -214,6 +223,9 @@ export interface Config {
 export const PRESET_CHAR_MAP: Record<string, WidgetId> = {
   M: 'model',
   C: 'context',
+  b: 'contextBar',
+  '%': 'contextPercentage',
+  '#': 'contextUsage',
   $: 'cost',
   R: 'rateLimit5h',
   '7': 'rateLimit7d',
@@ -245,6 +257,7 @@ export const PRESET_CHAR_MAP: Record<string, WidgetId> = {
   m: 'vimMode',
   a: 'apiDuration',
   p: 'peakHours',
+  t: 'tagStatus',
 };
 
 /**
@@ -385,7 +398,7 @@ export interface WidgetContext {
 /**
  * Widget data types for each widget
  */
-export type EffortLevel = 'high' | 'medium' | 'low';
+export type EffortLevel = 'xhigh' | 'high' | 'medium' | 'low';
 
 export interface ModelData {
   id: string;
@@ -425,6 +438,14 @@ export interface ProjectInfoData {
   worktreeName?: string;
   /** Git remote HTTPS URL for OSC8 hyperlink (includes /tree/{branch}) */
   remoteUrl?: string;
+}
+
+/**
+ * Tag status data - distance (commits ahead) from each matched tag.
+ * Patterns with no matching tag are omitted; widget hidden when empty.
+ */
+export interface TagStatusData {
+  tags: Array<{ name: string; count: number }>;
 }
 
 export interface ConfigCountsData {
@@ -753,7 +774,8 @@ export type WidgetData =
   | LastPromptData
   | VimModeData
   | ApiDurationData
-  | PeakHoursData;
+  | PeakHoursData
+  | TagStatusData;
 
 /**
  * Transcript entry from JSONL file

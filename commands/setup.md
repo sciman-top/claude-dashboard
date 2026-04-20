@@ -18,7 +18,7 @@ Configure the claude-dashboard status line plugin with widget system support.
 - `$1`: Display mode
   - `compact` (default): 1 line (model, context, cost, rateLimit5h, rateLimit7d, rateLimit7dSonnet, zaiUsage)
   - `normal`: 2 lines (+ projectInfo, sessionId, sessionDuration, burnRate, todoProgress)
-  - `detailed`: 6 lines (+ sessionName, tokenSpeed, depletionTime, configCounts, toolActivity, agentStatus, cacheHit, performance, tokenBreakdown, forecast, budget, todayCost, codexUsage, geminiUsage, linesChanged, outputStyle, version, peakHours, lastPrompt)
+  - `detailed`: 6 lines (+ sessionName, tokenSpeed, depletionTime, configCounts, toolActivity, agentStatus, cacheHit, performance, tokenBreakdown, forecast, budget, todayCost, codexUsage, geminiUsage, linesChanged, outputStyle, version, peakHours, lastPrompt, vimMode, apiDuration, tagStatus)
   - `custom`: Custom widget configuration (requires `$4`)
 
 - `$2`: Language preference
@@ -41,10 +41,13 @@ Configure the claude-dashboard status line plugin with widget system support.
 |--------|-------------|
 | `model` | Model name with emoji, effort level (Opus/Sonnet), fast mode (Opus) |
 | `context` | Progress bar, percentage, tokens |
+| `contextBar` | Progress bar only (sub-widget of `context`) |
+| `contextPercentage` | Percentage only (sub-widget of `context`) |
+| `contextUsage` | Token count only, e.g. `42K/200K` (sub-widget of `context`) |
 | `cost` | Session cost in USD |
 | `rateLimit5h` | 5-hour rate limit |
-| `rateLimit7d` | 7-day rate limit (Max only) |
-| `rateLimit7dSonnet` | 7-day Sonnet limit (Max only) |
+| `rateLimit7d` | 7-day rate limit (Pro/Max) |
+| `rateLimit7dSonnet` | 7-day Sonnet limit (Max) |
 | `projectInfo` | Directory name + git branch + ahead/behind (↑↓), subpath from project_dir, worktree indicator |
 | `configCounts` | CLAUDE.md, AGENTS.md, rules, MCPs, hooks, +Dirs counts |
 | `sessionId` | Session ID (short 8 chars) |
@@ -73,6 +76,7 @@ Configure the claude-dashboard status line plugin with widget system support.
 | `vimMode` | Vim mode (NORMAL/INSERT), auto-hides when vim disabled |
 | `apiDuration` | API time as % of total session time |
 | `peakHours` | Peak hours indicator with countdown (weekdays 5-11 AM PT) |
+| `tagStatus` | Commits ahead of matched git tags (uses `tagPatterns` config, default `["v*"]`) |
 
 ## Tasks
 
@@ -86,16 +90,16 @@ Use AskUserQuestion to ask the user. Batch independent questions into a single A
 1. Display mode — MUST include `markdown` field on each option for visual preview:
    - compact (recommended), markdown:
      ```
-     ◆ Opus(H) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      ```
    - normal, markdown:
      ```
-     ◆ Opus(H) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      📁 project (main ↑3) │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ✓ 3/5
      ```
    - detailed, markdown:
      ```
-     ◆ Opus(H) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      📁 project (main ↑3) │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ⏳ 2h │ ✓ 3/5
      CLAUDE.md: 2 │ ⚙️ 12 done │ 🤖 Agent: 1 │ 📦 85% │ 🟢 72%
      📊 In 30K · Out 8K │ 📈 ~$8/h │ 💵 $5/$15 │ 🔷 codex │ 💎 gemini
@@ -107,7 +111,7 @@ Use AskUserQuestion to ask the user. Batch independent questions into a single A
      ```
 2. Language: auto (recommended), en, ko
 3. Plan: max (recommended), pro
-4. Theme: default (recommended), minimal, catppuccin, "dracula / gruvbox / nord / tokyoNight / solarized"
+4. Theme: default (recommended), minimal, catppuccin, catppuccinLatte, "dracula / gruvbox / nord / tokyoNight / solarized"
    - If multi-option selected: ask in next turn which one
 
 **Turn 2** — If display mode = "custom", ask for each line's widgets:
@@ -157,7 +161,7 @@ Create `~/.claude/claude-dashboard.local.json`:
 }
 ```
 
-Preset characters: `M`=model, `C`=context, `$`=cost, `R`=rateLimit5h, `7`=rateLimit7d, `S`=7dSonnet, `P`=projectInfo, `I`=sessionId, `D`=sessionDuration, `T`=toolActivity, `A`=agentStatus, `O`=todoProgress, `B`=burnRate, `E`=depletionTime, `H`=cacheHit, `X`=codexUsage, `G`=geminiUsage, `Z`=zaiUsage, `K`=configCounts, `N`=tokenBreakdown, `F`=performance, `W`=forecast, `U`=budget, `L`=linesChanged, `Y`=outputStyle, `V`=version, `Q`=tokenSpeed, `J`=sessionName, `@`=todayCost, `p`=peakHours. Use `|` to separate lines.
+Preset characters: `M`=model, `C`=context, `b`=contextBar, `%`=contextPercentage, `#`=contextUsage, `$`=cost, `R`=rateLimit5h, `7`=rateLimit7d, `S`=7dSonnet, `P`=projectInfo, `I`=sessionId, `D`=sessionDuration, `T`=toolActivity, `A`=agentStatus, `O`=todoProgress, `B`=burnRate, `E`=depletionTime, `H`=cacheHit, `X`=codexUsage, `G`=geminiUsage, `Z`=zaiUsage, `K`=configCounts, `N`=tokenBreakdown, `F`=performance, `W`=forecast, `U`=budget, `L`=linesChanged, `Y`=outputStyle, `V`=version, `Q`=tokenSpeed, `J`=sessionName, `@`=todayCost, `?`=lastPrompt, `m`=vimMode, `a`=apiDuration, `p`=peakHours, `t`=tagStatus. Use `|` to separate lines.
 
 **For custom mode:**
 ```json
@@ -185,7 +189,14 @@ Preset characters: `M`=model, `C`=context, `$`=cost, `R`=rateLimit5h, `7`=rateLi
 }
 ```
 
-**Note**: Omit `"disabledWidgets"` field entirely if user chose not to hide any widgets. Omit `"dailyBudget"` if not using budget tracking. Omit `"separator"` if using default pipe style.
+**For tagStatus patterns** (add to any config, default is `["v*"]`):
+```json
+{
+  "tagPatterns": ["v*", "release-*"]
+}
+```
+
+**Note**: Omit `"disabledWidgets"` field entirely if user chose not to hide any widgets. Omit `"dailyBudget"` if not using budget tracking. Omit `"tagPatterns"` to use the default `["v*"]`. Omit `"separator"` if using default pipe style.
 
 ### 3. Update settings.json
 

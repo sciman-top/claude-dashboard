@@ -15,13 +15,13 @@ This page provides detailed information about each widget, including its data so
 |----------|-------|
 | **Widget ID** | `model` |
 | **Data Source** | stdin (model info) + settings (effort/fast mode) |
-| **Description** | Displays the current model name with emoji. Shows effort level for Opus/Sonnet (H/M/L) and fast mode indicator for Opus (↯). |
+| **Description** | Displays the current model name with emoji. Shows effort level for Opus/Sonnet (X/H/M/L) and fast mode indicator for Opus (↯). |
 
 **Example output:**
 ```
-Opus(H)
+Opus(X)
 Sonnet(M)
-Opus(H↯)
+Opus(X↯)
 ```
 
 ### context
@@ -36,6 +36,24 @@ Opus(H↯)
 ```
 -------- 45% 90K
 ████---- 80% 160K
+```
+
+### contextBar / contextPercentage / contextUsage
+
+Sub-widgets of `context` that render just one of its three components. Use them when you need to keep the status line compact (e.g., on a split terminal) while still surfacing the most important context information. All sub-widgets share the same data source as `context`, so colors and percentages stay in sync.
+
+| Widget ID | Shows |
+|-----------|-------|
+| `contextBar` | Progress bar only |
+| `contextPercentage` | Percentage only (e.g. `45%`) |
+| `contextUsage` | Token count only (e.g. `90K/200K`) |
+
+**Example layout:**
+```jsonc
+// .claude/claude-dashboard.local.json
+"lines": [
+  ["projectInfo", "contextBar", "contextPercentage", "rateLimit5h"]
+]
 ```
 
 ### cost
@@ -91,7 +109,7 @@ $0.03
 |----------|-------|
 | **Widget ID** | `rateLimit7d` |
 | **Data Source** | API (oauth/usage) |
-| **Description** | Shows the 7-day rate limit utilization. Max plan only. |
+| **Description** | Shows the 7-day rate limit utilization. Available on Pro and Max plans. |
 
 **Example output:**
 ```
@@ -513,4 +531,19 @@ API 72%
 Peak (3h17m)
 Off-Peak (23h9m)
 Off-Peak (2d17h)
+```
+
+### tagStatus
+
+| Property | Value |
+|----------|-------|
+| **Widget ID** | `tagStatus` |
+| **Data Source** | git (`describe` + `rev-list --count`) |
+| **Description** | Shows the number of commits ahead of each matched git tag. Configure patterns via `"tagPatterns"` (default `["v*"]`). Widget hides when no pattern matches a reachable tag. |
+| **Preset Char** | `t` |
+
+**Example output:**
+```
+v1.2.3 +5
+v1.2.3 +5, beta-3 +2
 ```

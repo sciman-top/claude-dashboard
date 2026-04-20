@@ -103,6 +103,7 @@ claude-dashboard/
 | 위젯 구현 (기본) | `scripts/widgets/cost.ts` |
 | 위젯 구현 (API) | `scripts/widgets/rate-limit.ts` |
 | 위젯 구현 (transcript) | `scripts/widgets/tool-activity.ts` |
+| 위젯 구현 (파생/공유 getData) | `scripts/widgets/context.ts`, `scripts/widgets/session-id.ts` |
 | API 클라이언트 | `scripts/utils/api-client.ts` |
 | 포매팅 유틸리티 | `scripts/utils/formatters.ts` |
 
@@ -125,11 +126,14 @@ interface Widget<T extends WidgetData> {
 
 | Widget ID | Data Source | Description |
 |-----------|-------------|-------------|
-| `model` | stdin + settings | Model name with emoji, effort level for Opus/Sonnet (H/M/L), fast mode for Opus (↯) |
+| `model` | stdin + settings | Model name with emoji, effort level for Opus/Sonnet (X/H/M/L), fast mode for Opus (↯) |
 | `context` | stdin | Progress bar, %, tokens |
+| `contextBar` | stdin | Progress bar only (sub-widget of `context`) |
+| `contextPercentage` | stdin | Percentage only (sub-widget of `context`) |
+| `contextUsage` | stdin | Token count only, e.g. `42K/200K` (sub-widget of `context`) |
 | `cost` | stdin | Session cost |
 | `rateLimit5h` | API | 5-hour rate limit |
-| `rateLimit7d` | API | 7-day rate limit (Max) |
+| `rateLimit7d` | API | 7-day rate limit (Pro/Max) |
 | `rateLimit7dSonnet` | API | 7-day Sonnet limit (Max) |
 | `projectInfo` | stdin + git | Directory + branch + ahead/behind (↑↓), subpath when CWD differs from project_dir, worktree indicator |
 | `configCounts` | filesystem + stdin | CLAUDE.md, AGENTS.md, rules, MCPs, hooks, +Dirs |
@@ -158,6 +162,7 @@ interface Widget<T extends WidgetData> {
 | `vimMode` | stdin | Vim mode (NORMAL/INSERT), hidden when vim disabled |
 | `apiDuration` | stdin | API time as % of session time |
 | `peakHours` | system clock | Peak hours indicator with countdown (weekdays 5-11 AM PT) |
+| `tagStatus` | git | Distance (commits ahead) from matched git tags. Supports multiple glob patterns via `tagPatterns` config (default `["v*"]`). Hidden when no pattern matches. |
 
 ### Display Modes
 
@@ -179,7 +184,7 @@ const DISPLAY_PRESETS = {
     ['configCounts', 'toolActivity', 'agentStatus', 'cacheHit', 'performance'],
     ['tokenBreakdown', 'forecast', 'budget', 'todayCost'],
     ['codexUsage', 'geminiUsage', 'linesChanged', 'outputStyle', 'version', 'peakHours'],
-    ['lastPrompt'],
+    ['lastPrompt', 'vimMode', 'apiDuration', 'tagStatus'],
   ],
 };
 ```
@@ -210,7 +215,9 @@ Quick widget layout via single-character shorthand. Set `"preset"` in config, us
 | `Q` | tokenSpeed | `J` | sessionName |
 | `@` | todayCost | `?` | lastPrompt |
 | `m` | vimMode | `a` | apiDuration |
-| `p` | peakHours | | |
+| `p` | peakHours | `t` | tagStatus |
+| `b` | contextBar | `%` | contextPercentage |
+| `#` | contextUsage | | |
 
 ### Theme System
 
@@ -221,6 +228,7 @@ Color themes via `getTheme()` semantic roles. Set `"theme"` in config.
 | `default` | Pastel colors (cyan, yellow, pink, green) |
 | `minimal` | Monochrome (white + gray) |
 | `catppuccin` | Catppuccin Mocha palette |
+| `catppuccinLatte` | Catppuccin Latte palette (light-mode terminals) |
 | `dracula` | Dracula palette |
 | `gruvbox` | Gruvbox palette |
 | `nord` | Nord polar night/frost palette |

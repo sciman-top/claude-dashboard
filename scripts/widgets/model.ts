@@ -17,7 +17,7 @@ import { RESET, getTheme } from '../utils/colors.js';
 import { shortenModelName } from '../utils/formatters.js';
 import { isZaiProvider } from '../utils/provider.js';
 
-const EFFORT_LEVELS = new Set<string>(['high', 'medium', 'low']);
+const EFFORT_LEVELS = new Set<string>(['xhigh', 'high', 'medium', 'low']);
 
 function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === 'string' && EFFORT_LEVELS.has(value);
@@ -28,8 +28,17 @@ interface ModelSettings {
   fastMode: boolean;
 }
 
-function getDefaultEffort(modelId: string): EffortLevel {
-  if (modelId.includes('opus-4-6') || modelId.includes('sonnet-4-6')) return 'medium';
+/**
+ * Fallback effort when settings.json is absent or lacks `effortLevel`.
+ * Mirrors Claude Code's runtime defaults so the badge matches actual behavior
+ * for users who never ran `/effort`. Keep in sync with upstream:
+ *   Opus → xhigh, Sonnet → medium.
+ * Haiku has no effort tier (render() hides the badge); the `'high'` fallback
+ * is a safety net for unknown model IDs.
+ */
+export function getDefaultEffort(modelId: string): EffortLevel {
+  if (modelId.includes('opus')) return 'xhigh';
+  if (modelId.includes('sonnet')) return 'medium';
   return 'high';
 }
 
@@ -89,7 +98,7 @@ export const modelWidget: Widget<ModelData> = {
     const shortName = shortenModelName(data.displayName);
     const icon = isZaiProvider() ? '🟠' : '◆';
 
-    // Show effort suffix for Opus and Sonnet: (H), (M), (L). Haiku excluded.
+    // Haiku excluded from effort badge
     const supportsEffort = shortName === 'Opus' || shortName === 'Sonnet';
     const effortSuffix = supportsEffort
       ? `(${data.effortLevel[0].toUpperCase()})`
