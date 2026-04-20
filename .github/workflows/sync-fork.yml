@@ -37,6 +37,7 @@ jobs:
           UPSTREAM_BRANCH=$(gh api "repos/$UPSTREAM_FULL_NAME" --jq '.default_branch // empty')
           UPSTREAM_URL=$(gh api "repos/$UPSTREAM_FULL_NAME" --jq '.clone_url')
           echo "full_name=$UPSTREAM_FULL_NAME" >> "$GITHUB_OUTPUT"
+          echo "owner=${UPSTREAM_FULL_NAME%%/*}" >> "$GITHUB_OUTPUT"
           echo "branch=$UPSTREAM_BRANCH" >> "$GITHUB_OUTPUT"
           echo "url=$UPSTREAM_URL" >> "$GITHUB_OUTPUT"
 
@@ -74,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           FORK_FILES=$(git ls-tree -r --name-only HEAD | wc -l | tr -d '[:space:]')
-          COMPARE_JSON=$(gh api "repos/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${{ steps.upstream.outputs.full_name }}:${{ steps.upstream.outputs.branch }}")
+          COMPARE_JSON=$(gh api "repos/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${{ steps.upstream.outputs.owner }}:${{ steps.upstream.outputs.branch }}")
           TOTAL_DELETIONS=$(printf '%s' "$COMPARE_JSON" | jq -r '.total_deletions // 0')
           DELETED_FILES=$(printf '%s' "$COMPARE_JSON" | jq -r '.files[]? | select(.status == "removed") | .filename')
           DELETE_LIMIT=$(( 5 + (FORK_FILES / 10) ))
