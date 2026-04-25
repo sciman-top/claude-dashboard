@@ -111,8 +111,10 @@ Use AskUserQuestion to ask the user. Batch independent questions into a single A
      ```
 2. Language: auto (recommended), en, ko
 3. Plan: max (recommended), pro
-4. Theme: default (recommended), minimal, catppuccin, catppuccinLatte, "dracula / gruvbox / nord / tokyoNight / solarized"
+4. Theme: default (recommended), minimal, "catppuccin (mocha / latte — light)", "dracula / gruvbox / nord / tokyoNight / solarized"
+   - All themes are dark except `catppuccinLatte`, which is designed for light-mode terminals
    - If multi-option selected: ask in next turn which one
+   - For catppuccin, map `mocha` → config value `catppuccin`, `latte` → `catppuccinLatte`
 
 **Turn 2** — If display mode = "custom", ask for each line's widgets:
 - Show available widgets table for reference
