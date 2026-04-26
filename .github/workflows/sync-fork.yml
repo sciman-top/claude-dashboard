@@ -72,10 +72,14 @@ jobs:
         if: steps.upstream.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
+          BASE_REF: ${{ github.event.repository.default_branch }}
+          HEAD_REF: ${{ steps.upstream.outputs.owner }}:${{ steps.upstream.outputs.branch }}
         run: |
           set -euo pipefail
           FORK_FILES=$(git ls-tree -r --name-only HEAD | wc -l | tr -d '[:space:]')
-          COMPARE_JSON=$(gh api "repos/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${{ steps.upstream.outputs.owner }}:${{ steps.upstream.outputs.branch }}")
+          COMPARE_BASE=$(python3 -c 'import os; from urllib.parse import quote; print(quote(os.environ["BASE_REF"], safe=":"))')
+          COMPARE_HEAD=$(python3 -c 'import os; from urllib.parse import quote; print(quote(os.environ["HEAD_REF"], safe=":"))')
+          COMPARE_JSON=$(gh api "repos/${{ github.repository }}/compare/${COMPARE_BASE}...${COMPARE_HEAD}")
           TOTAL_DELETIONS=$(printf '%s' "$COMPARE_JSON" | jq -r '.total_deletions // 0')
           DELETED_FILES=$(printf '%s' "$COMPARE_JSON" | jq -r '.files[]? | select(.status == "removed") | .filename')
           DELETE_LIMIT=$(( 5 + (FORK_FILES / 10) ))
@@ -95,4 +99,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          gh api repos/${{ github.repository }}/merge-upstream -X POST -f branch=${{ steps.upstream.outputs.branch }}
+          set -euo pipefail
+          gh api repos/${{ github.repository }}/merge-upstream -X POST -f branch=${{ github.event.repository.default_branch }}
