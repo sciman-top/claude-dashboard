@@ -597,7 +597,13 @@ describe('widgets', () => {
     });
 
     it('should re-fetch after clearGitCacheForTest()', async () => {
-      const spy = vi.spyOn(gitUtils, 'execGit').mockResolvedValue('main\n');
+      const spy = vi.spyOn(gitUtils, 'execGit').mockImplementation(async (args: string[]) => {
+        if (args[0] === 'rev-parse') return 'main\n';
+        if (args[0] === 'status') return '';
+        if (args[0] === 'rev-list') return '0\t0\n';
+        if (args[0] === 'remote') return '';
+        return '';
+      });
       const ctx = createContext();
 
       await projectInfoWidget.getData(ctx);
