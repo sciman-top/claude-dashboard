@@ -274,6 +274,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=uppinote20/claude-dashboard&type=Date)](https://star-history.com/#uppinote20/claude-dashboard&Date)
 
+## ☕ Support
+
+If you find this plugin useful, support development:
+
+<div style="display: flex; gap: 20px; align-items: center;">
+  <a href="https://ko-fi.com/uppinote" target="_blank">
+    <img src="https://storage.ko-fi.com/cdn/kofi5.png" alt="Buy Me a Coffee at ko-fi.com" style="height:60px; width:217px;">
+  </a>
+  <a href="https://www.buymeacoffee.com/uppinote" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height:60px; width:217px;">
+  </a>
+</div>
+
 ## License
 
 MIT
