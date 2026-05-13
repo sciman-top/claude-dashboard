@@ -116,12 +116,37 @@ Use AskUserQuestion to ask the user. Batch independent questions into a single A
    - If multi-option selected: ask in next turn which one
    - For catppuccin, map `mocha` → config value `catppuccin`, `latte` → `catppuccinLatte`
 
-**Turn 2** — If display mode = "custom", ask for each line's widgets:
-- Show available widgets table for reference
-- Line 1 widgets (comma-separated text input with suggested combinations)
-- Ask if they want to add Line 2
-- If yes, Line 2 widgets
-- Continue until they say no (no line limit)
+**Turn 2** — If display mode = "custom", build the layout one line at a time using category-based multi-select.
+
+For each line `N` (starting at 1), repeat the following sub-flow until the user declines to add another line:
+
+**Step A — Pick categories for line `N`:**
+Single AskUserQuestion call with `multiSelect: true`, max 4 options. Ask: "Line `N`: which widget categories do you want to pull from?" The 4 category options are:
+
+1. **Model & Context** — `model`, `context`, `contextBar`, `contextPercentage`, `contextUsage`
+2. **Cost & Limits** — `cost`, `rateLimit5h`, `rateLimit7d`, `rateLimit7dSonnet`, `budget`, `forecast`, `todayCost`
+3. **Project, Session & Activity** — `projectInfo`, `sessionId`, `sessionIdFull`, `sessionDuration`, `sessionName`, `configCounts`, `toolActivity`, `agentStatus`, `todoProgress`, `outputStyle`, `vimMode`, `linesChanged`, `version`, `lastPrompt`
+4. **Performance, Tokens & Other CLIs** — `burnRate`, `tokenSpeed`, `cacheHit`, `performance`, `tokenBreakdown`, `depletionTime`, `apiDuration`, `peakHours`, `tagStatus`, `codexUsage`, `geminiUsage`, `geminiUsageAll`, `zaiUsage`
+
+**Step B — Pick widgets from each selected category:**
+For every category the user selected in Step A, send one AskUserQuestion call with `multiSelect: true` listing the widgets in that category. AskUserQuestion allows max 4 options per call, so if a category has more than 4 widgets, split into multiple consecutive calls (e.g. "Cost & Limits (1/2)", "Cost & Limits (2/2)") — the user can pick zero or more widgets from each page.
+
+Each widget option's `description` should be a short version of the table at the top of this file (e.g. `cost` → "Session cost in USD").
+
+Collect every selected widget into an ordered list for line `N`, preserving the order they were chosen.
+
+**Step C — Add another line?**
+Single AskUserQuestion call (not multi-select) asking: "Line `N` has `[widget1, widget2, ...]`. Add another line?" with options `No (finish)` and `Yes, add Line N+1`. If the user picks "No", end the loop. If "Yes", increment `N` and return to Step A. There is no hard line limit.
+
+**Notes for the assistant running this flow:**
+- If the user selects zero widgets for a line (no categories or no widgets within selected categories), warn them and re-ask Step A for that same line — empty lines are not allowed.
+- Show the running layout in Step C's question text so the user always sees what they've built so far.
+- Keep the multi-select widget questions free of preset/combination options — the whole point of custom mode is per-widget control.
+- **Track already-placed widgets across lines.** Maintain a `placed` set of every widget chosen so far. Starting from line 2 onward:
+  - In Step A, list each category's `description` using **only the widgets not yet in `placed`** (e.g. if `model` and `context` are already placed, the Model & Context description becomes "contextBar, contextPercentage, contextUsage"). Truncate with "etc." past ~6–8 names if needed.
+  - If a category has zero remaining widgets, **omit the entire category option** from Step A's choices.
+  - In Step B, exclude already-placed widgets from each category's multi-select options as well.
+  - If every category becomes empty (all widgets placed), inform the user and end the loop after the current line — there is nothing left to add.
 
 **Turn 3** — Ask: "Do you want to hide any widgets?"
 - Options: No (recommended), Yes
