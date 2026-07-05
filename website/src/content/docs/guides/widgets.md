@@ -5,13 +5,13 @@ sidebar:
   order: 2
 ---
 
-claude-dashboard provides 39 widgets organized by category. Each widget can be individually enabled, disabled, or rearranged in your layout.
+claude-dashboard provides 40 widgets organized by category. Each widget can be individually enabled, disabled, or rearranged in your layout.
 
 ## Core
 
 | Widget | Description |
 |--------|-------------|
-| `model` | Model name with emoji, effort level for Opus/Sonnet (X/H/M/L), fast mode for Opus (↯) |
+| `model` | Model name with emoji, effort level for Opus/Sonnet/Fable (MAX/X/H/M/L), fast mode for Opus (↯) |
 | `context` | Progress bar, percentage, tokens (green 0-50% / yellow 51-80% / red 81-100%) |
 | `contextBar` | Progress bar only (sub-widget of `context`) |
 | `contextPercentage` | Percentage only (sub-widget of `context`) |
@@ -25,7 +25,8 @@ claude-dashboard provides 39 widgets organized by category. Each widget can be i
 |--------|-------------|
 | `rateLimit5h` | 5-hour rate limit with reset countdown |
 | `rateLimit7d` | 7-day rate limit (Pro and Max) |
-| `rateLimit7dSonnet` | 7-day Sonnet limit (Max plan only) |
+| `rateLimit7dSonnet` | 7-day Sonnet limit (Max plan only) — deprecated ~2026-06, merged into the unified weekly bucket at Sonnet 5 launch; stays hidden while the API returns null |
+| `rateLimit7dFable` | 7-day Fable limit (Max plan only) — Fable-only weekly cap from the API `limits[]` array; hidden unless the account has a Fable cap |
 
 ## Session
 

@@ -5,13 +5,13 @@ sidebar:
   order: 2
 ---
 
-claude-dashboard는 39개의 위젯을 제공합니다. 각 위젯은 독립적으로 데이터를 가져오고 렌더링하며, 데이터를 가져올 수 없는 경우 자동으로 숨겨집니다.
+claude-dashboard는 40개의 위젯을 제공합니다. 각 위젯은 독립적으로 데이터를 가져오고 렌더링하며, 데이터를 가져올 수 없는 경우 자동으로 숨겨집니다.
 
 ## Core
 
 | 위젯 | ID | 설명 |
 |------|-----|------|
-| 모델 | `model` | 모델 이름과 이모지, Opus/Sonnet effort 수준(X/H/M/L), Opus 빠른 모드(↯) |
+| 모델 | `model` | 모델 이름과 이모지, Opus/Sonnet/Fable effort 수준(MAX/X/H/M/L), Opus 빠른 모드(↯) |
 | 컨텍스트 | `context` | 프로그레스 바, 백분율, 토큰 수 (🟢 0-50% / 🟡 51-80% / 🔴 81-100%) |
 | 컨텍스트 바 | `contextBar` | 프로그레스 바만 (`context`의 서브 위젯) |
 | 컨텍스트 백분율 | `contextPercentage` | 백분율만 (`context`의 서브 위젯) |
@@ -25,7 +25,8 @@ claude-dashboard는 39개의 위젯을 제공합니다. 각 위젯은 독립적�
 |------|-----|------|
 | 5시간 제한 | `rateLimit5h` | 5시간 사용량 및 리셋 카운트다운 |
 | 7일 제한 | `rateLimit7d` | 7일 사용량 (Pro/Max) |
-| 7일 Sonnet 제한 | `rateLimit7dSonnet` | 7일 Sonnet 사용량 (Max 전용) |
+| 7일 Sonnet 제한 | `rateLimit7dSonnet` | 7일 Sonnet 사용량 (Max 전용) — ~2026-06 지원 중단: Sonnet 5 출시로 통합 주간 버킷에 병합, API가 null을 반환하는 동안 숨김 |
+| 7일 Fable 제한 | `rateLimit7dFable` | 7일 Fable 사용량 (Max 전용) — API `limits[]` 배열에서만 오는 Fable 전용 주간 한도, 계정에 Fable cap이 없으면 숨김 |
 
 ## Session
 

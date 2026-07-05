@@ -8,14 +8,14 @@ import { homedir as homedir6 } from "os";
 // scripts/types.ts
 var DISPLAY_PRESETS = {
   compact: [
-    ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "zaiUsage"]
+    ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "rateLimit7dFable", "zaiUsage"]
   ],
   normal: [
-    ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "zaiUsage"],
+    ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "rateLimit7dFable", "zaiUsage"],
     ["projectInfo", "sessionId", "sessionDuration", "burnRate", "todoProgress"]
   ],
   detailed: [
-    ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "zaiUsage"],
+    ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "rateLimit7dFable", "zaiUsage"],
     ["projectInfo", "sessionName", "sessionId", "sessionDuration", "burnRate", "tokenSpeed", "depletionTime", "todoProgress"],
     ["configCounts", "toolActivity", "agentStatus", "cacheHit", "performance"],
     ["tokenBreakdown", "forecast", "budget", "todayCost"],
@@ -33,6 +33,7 @@ var PRESET_CHAR_MAP = {
   R: "rateLimit5h",
   "7": "rateLimit7d",
   S: "rateLimit7dSonnet",
+  f: "rateLimit7dFable",
   P: "projectInfo",
   I: "sessionId",
   D: "sessionDuration",
@@ -567,7 +568,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.29.0";
+var VERSION = "1.30.0";
 
 // scripts/utils/debug.ts
 var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
@@ -840,12 +841,27 @@ function validateLimitWindow(raw) {
     resets_at: typeof w.resets_at === "string" ? w.resets_at : null
   };
 }
+function findWeeklyScopedLimit(limits, modelDisplayName) {
+  if (!Array.isArray(limits))
+    return null;
+  const entry = limits.find((raw) => {
+    if (!raw || typeof raw !== "object")
+      return false;
+    const l = raw;
+    return l.kind === "weekly_scoped" && l.scope?.model?.display_name === modelDisplayName;
+  });
+  if (!entry)
+    return null;
+  return validateLimitWindow({ utilization: entry.percent, resets_at: entry.resets_at });
+}
 async function parseAndCacheLimits(data, tokenHash) {
   const d = data && typeof data === "object" ? data : {};
   const limits = {
     five_hour: validateLimitWindow(d.five_hour),
     seven_day: validateLimitWindow(d.seven_day),
-    seven_day_sonnet: validateLimitWindow(d.seven_day_sonnet)
+    seven_day_sonnet: validateLimitWindow(d.seven_day_sonnet),
+    // New models expose their weekly cap only via limits[] (findWeeklyScopedLimit), not a flat field.
+    seven_day_fable: findWeeklyScopedLimit(d.limits, "Fable")
   };
   usageCacheMap.set(tokenHash, { data: limits, timestamp: Date.now() });
   await saveFileCache2(tokenHash, limits);
@@ -874,6 +890,7 @@ var en_default = {
     "7d": "7d",
     "7d_all": "7d",
     "7d_sonnet": "7d-S",
+    "7d_fable": "7d-F",
     codex: "Codex",
     "1m": "1m"
   },
@@ -933,6 +950,7 @@ var ko_default = {
     "7d": "7\uC77C",
     "7d_all": "7\uC77C",
     "7d_sonnet": "7\uC77C-S",
+    "7d_fable": "7\uC77C-F",
     codex: "Codex",
     "1m": "1\uAC1C\uC6D4"
   },
@@ -1049,6 +1067,8 @@ function shortenModelName(displayName) {
     return "Sonnet";
   if (lower.includes("haiku"))
     return "Haiku";
+  if (lower.includes("fable"))
+    return "Fable";
   const parts = displayName.split(/\s+/);
   if (parts.length > 1 && parts[0].toLowerCase() === "claude") {
     return parts[1];
@@ -1113,15 +1133,18 @@ function getZaiApiBaseUrl() {
 }
 
 // scripts/widgets/model.ts
-var EFFORT_LEVELS = /* @__PURE__ */ new Set(["xhigh", "high", "medium", "low"]);
+var EFFORT_BADGE = {
+  max: "MAX",
+  xhigh: "X",
+  high: "H",
+  medium: "M",
+  low: "L"
+};
+var EFFORT_LEVELS = new Set(Object.keys(EFFORT_BADGE));
 function isEffortLevel(value) {
   return typeof value === "string" && EFFORT_LEVELS.has(value);
 }
-function getDefaultEffort(modelId) {
-  if (modelId.includes("opus"))
-    return "xhigh";
-  if (modelId.includes("sonnet"))
-    return "medium";
+function getDefaultEffort(_modelId) {
   return "high";
 }
 var settingsCache = null;
@@ -1162,7 +1185,7 @@ var modelWidget = {
     const modelId = model?.id || "";
     const { effortLevel, fastMode } = await getModelSettings(modelId);
     return {
-      id: model?.id || "",
+      id: modelId,
       displayName: model?.display_name || "-",
       effortLevel,
       fastMode
@@ -1171,8 +1194,8 @@ var modelWidget = {
   render(data) {
     const shortName = shortenModelName(data.displayName);
     const icon = isZaiProvider() ? ICON.orangeCircle : "\u25C6";
-    const supportsEffort = shortName === "Opus" || shortName === "Sonnet";
-    const effortSuffix = supportsEffort ? `(${data.effortLevel[0].toUpperCase()})` : "";
+    const supportsEffort = shortName === "Opus" || shortName === "Sonnet" || shortName === "Fable";
+    const effortSuffix = supportsEffort ? `(${EFFORT_BADGE[data.effortLevel]})` : "";
     const fastIndicator = shortName === "Opus" && data.fastMode ? " \u21AF" : "";
     return `${getTheme().model}${icon} ${shortName}${effortSuffix}${fastIndicator}${RESET}`;
   }
@@ -1335,6 +1358,20 @@ var rateLimit7dSonnetWidget = {
   },
   render(data, ctx) {
     return renderRateLimit(data, ctx, "7d_sonnet");
+  }
+};
+var rateLimit7dFableWidget = {
+  id: "rateLimit7dFable",
+  name: "7d Fable Rate Limit",
+  async getData(ctx) {
+    if (shouldHideAnthropicLimits())
+      return null;
+    if (ctx.config.plan !== "max")
+      return null;
+    return getLimitData(ctx.rateLimits, "seven_day_fable");
+  },
+  render(data, ctx) {
+    return renderRateLimit(data, ctx, "7d_fable");
   }
 };
 
@@ -3935,6 +3972,7 @@ var widgetRegistry = /* @__PURE__ */ new Map([
   ["rateLimit5h", rateLimit5hWidget],
   ["rateLimit7d", rateLimit7dWidget],
   ["rateLimit7dSonnet", rateLimit7dSonnetWidget],
+  ["rateLimit7dFable", rateLimit7dFableWidget],
   ["projectInfo", projectInfoWidget],
   ["configCounts", configCountsWidget],
   ["sessionDuration", sessionDurationWidget],
@@ -4069,7 +4107,9 @@ function parseStdinRateLimits(stdin) {
   return {
     five_hour: rl.five_hour ? convertStdinLimit(rl.five_hour) : null,
     seven_day: rl.seven_day ? convertStdinLimit(rl.seven_day) : null,
-    seven_day_sonnet: null
+    seven_day_sonnet: null,
+    // Not available in stdin
+    seven_day_fable: null
     // Not available in stdin
   };
 }
@@ -4089,7 +4129,11 @@ async function main() {
     rateLimits = await fetchUsageLimits(config.cache.ttlSeconds);
   } else if (config.plan === "max") {
     const apiLimits = await fetchUsageLimits(config.cache.ttlSeconds);
-    rateLimits = { ...stdinLimits, seven_day_sonnet: apiLimits?.seven_day_sonnet ?? null };
+    rateLimits = {
+      ...stdinLimits,
+      seven_day_sonnet: apiLimits?.seven_day_sonnet ?? null,
+      seven_day_fable: apiLimits?.seven_day_fable ?? null
+    };
   } else {
     rateLimits = stdinLimits;
   }

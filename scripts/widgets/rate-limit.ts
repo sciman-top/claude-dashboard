@@ -15,7 +15,7 @@ import { ICON } from '../utils/emoji.js';
 import { formatTimeRemaining } from '../utils/formatters.js';
 import { isZaiProvider } from '../utils/provider.js';
 
-type LabelKey = '5h' | '7d_all' | '7d_sonnet';
+type LabelKey = '5h' | '7d_all' | '7d_sonnet' | '7d_fable';
 type LimitKey = keyof UsageLimits;
 
 function renderRateLimit(data: RateLimitData, ctx: WidgetContext, labelKey: LabelKey): string {
@@ -85,7 +85,13 @@ export const rateLimit7dWidget: Widget<RateLimitData> = {
 };
 
 /**
- * 7-day Sonnet-only rate limit widget (Max plan only)
+ * 7-day Sonnet-only rate limit widget (Max plan only).
+ *
+ * DEPRECATED (~2026-06): with the Sonnet 5 launch Anthropic merged the separate
+ * Sonnet weekly limit into the unified all-models weekly bucket, so the usage API
+ * now returns `seven_day_sonnet: null`. getData() therefore returns null and the
+ * widget stays hidden. Kept in the registry so existing configs/presets don't break
+ * and it auto-restores if Anthropic ever repopulates the field.
  */
 export const rateLimit7dSonnetWidget: Widget<RateLimitData> = {
   id: 'rateLimit7dSonnet',
@@ -99,5 +105,27 @@ export const rateLimit7dSonnetWidget: Widget<RateLimitData> = {
 
   render(data: RateLimitData, ctx: WidgetContext): string {
     return renderRateLimit(data, ctx, '7d_sonnet');
+  },
+};
+
+/**
+ * 7-day Fable-only rate limit widget (Max plan only).
+ *
+ * Unlike Sonnet, Fable never had a flat `seven_day_fable` field — the API
+ * only exposes it as a `weekly_scoped` entry in `limits[]`, so this widget's
+ * data only ever comes from api-client.ts's array parsing, never from stdin.
+ */
+export const rateLimit7dFableWidget: Widget<RateLimitData> = {
+  id: 'rateLimit7dFable',
+  name: '7d Fable Rate Limit',
+
+  async getData(ctx: WidgetContext): Promise<RateLimitData | null> {
+    if (shouldHideAnthropicLimits()) return null;
+    if (ctx.config.plan !== 'max') return null;
+    return getLimitData(ctx.rateLimits, 'seven_day_fable');
+  },
+
+  render(data: RateLimitData, ctx: WidgetContext): string {
+    return renderRateLimit(data, ctx, '7d_fable');
   },
 };
