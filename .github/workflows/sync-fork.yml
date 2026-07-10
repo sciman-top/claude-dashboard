@@ -139,3 +139,194 @@ jobs:
         run: |
           set -euo pipefail
           gh api repos/${{ github.repository }}/merge-upstream -X POST -f branch=${{ github.event.repository.default_branch }}
+
+      - name: Release retention policy
+        if: steps.upstream.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+          SELF_USE_RELEASE_REPOS: "sciman-top/cockpit-tools-local"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import shutil
+          import subprocess
+          import sys
+          import tempfile
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          self_use_repos = {
+              item.strip().lower()
+              for item in os.environ.get("SELF_USE_RELEASE_REPOS", "").split(",")
+              if item.strip()
+          }
+          if repo.lower() in self_use_repos:
+              print("::notice::self-use local releases policy is managed manually; weekly release retention is skipped.")
+              raise SystemExit(0)
+
+          installable_re = re.compile(r"\.(?:exe|msi|deb|rpm|appimage|dmg|pkg|zip|tar\.gz)$", re.IGNORECASE)
+          signed_re = re.compile(r"\.(?:sig|minisig|sigstore)$", re.IGNORECASE)
+
+          def gh_json(args):
+              cmd = ["gh", *args]
+              result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+              if result.returncode != 0:
+                  raise RuntimeError(result.stderr.strip() or "gh command failed")
+              return json.loads(result.stdout)
+
+          def gh_run(args):
+              cmd = ["gh", *args]
+              result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+              if result.returncode != 0:
+                  raise RuntimeError(result.stderr.strip() or "gh command failed")
+
+          def stable(releases):
+              return [
+                  release for release in releases
+                  if isinstance(release, dict)
+                  and not release.get("draft")
+                  and not release.get("prerelease")
+              ]
+
+          def required_asset_names(release):
+              assets = release.get("assets") or []
+              names = []
+              for asset in assets:
+                  name = asset.get("name")
+                  if not isinstance(name, str):
+                      continue
+                  lowered = name.lower()
+                  if (
+                      installable_re.search(name)
+                      or signed_re.search(name)
+                      or lowered in {
+                          "latest.json",
+                          "sha256sums",
+                          "sha256sums.txt",
+                          "sha512sums",
+                          "sha512sums.txt",
+                      }
+                  ):
+                      names.append(name)
+              return names
+
+          repo_meta = gh_json(["api", f"repos/{repo}"])
+          upstream = ((repo_meta.get("parent") or {}).get("full_name") or "").strip()
+          if not upstream:
+              print("::notice::Upstream repo metadata is missing; release retention skipped.")
+              raise SystemExit(0)
+
+          upstream_releases = gh_json(["api", f"repos/{upstream}/releases?per_page=100"])
+          fork_releases = gh_json(["api", f"repos/{repo}/releases?per_page=100"])
+          upstream_stable = stable(upstream_releases)
+          if not upstream_stable:
+              print("::notice::source-only release notes policy: upstream has no stable releases.")
+              raise SystemExit(0)
+
+          latest = upstream_stable[0]
+          tag = latest.get("tag_name")
+          if not tag:
+              print("::notice::Latest stable release has no tag; release retention skipped.")
+              raise SystemExit(0)
+
+          required = required_asset_names(latest)
+          if not required:
+              print("::notice::source-only release notes policy: upstream latest stable release has no mirrored assets.")
+              raise SystemExit(0)
+
+          latest_fork = None
+          for release in fork_releases:
+              if isinstance(release, dict) and release.get("tag_name") == tag:
+                  latest_fork = release
+                  break
+
+          if latest_fork is None:
+              payload_path = None
+              try:
+                  with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+                      json.dump({
+                          "tag_name": tag,
+                          "target_commitish": os.environ["GITHUB_REF_NAME"],
+                          "name": latest.get("name") or tag,
+                          "body": latest.get("body") or "",
+                          "draft": False,
+                          "prerelease": False,
+                      }, handle, ensure_ascii=False)
+                      payload_path = handle.name
+                  gh_run(["api", f"repos/{repo}/releases", "-X", "POST", "--input", payload_path])
+                  latest_fork = {"tag_name": tag, "assets": []}
+              finally:
+                  if payload_path and os.path.exists(payload_path):
+                      os.unlink(payload_path)
+
+          fork_asset_names = {
+              asset.get("name")
+              for asset in (latest_fork.get("assets") or [])
+              if isinstance(asset, dict) and isinstance(asset.get("name"), str)
+          }
+          missing = [name for name in required if name not in fork_asset_names]
+
+          if missing:
+              with tempfile.TemporaryDirectory() as tmpdir:
+                  for asset_name in missing:
+                      gh_run([
+                          "release", "download", tag,
+                          "-R", upstream,
+                          "-D", tmpdir,
+                          "-p", asset_name,
+                          "--clobber",
+                      ])
+
+                  latest_json = pathlib.Path(tmpdir) / "latest.json"
+                  if latest_json.exists():
+                      upstream_prefix = f"https://github.com/{upstream}/releases/download/{tag}/"
+                      fork_prefix = f"https://github.com/{repo}/releases/download/{tag}/"
+                      text = latest_json.read_text(encoding="utf-8")
+                      latest_json.write_text(text.replace(upstream_prefix, fork_prefix), encoding="utf-8")
+
+                  sha_sums = pathlib.Path(tmpdir) / "SHA256SUMS.txt"
+                  if sha_sums.exists() and latest_json.exists():
+                      latest_hash = hashlib.sha256(latest_json.read_bytes()).hexdigest()
+                      updated = []
+                      for line in sha_sums.read_text(encoding="utf-8").splitlines():
+                          stripped = line.rstrip("\n")
+                          if stripped.strip().endswith("latest.json"):
+                              filename = stripped.split()[-1]
+                              updated.append(f"{latest_hash}  {filename}")
+                          else:
+                              updated.append(stripped)
+                      sha_sums.write_text("\n".join(updated) + "\n", encoding="utf-8")
+
+                  upload_files = [str(pathlib.Path(tmpdir) / asset_name) for asset_name in missing]
+                  gh_run(["release", "upload", tag, *upload_files, "-R", repo])
+
+          old_stable = [
+              release for release in stable(fork_releases)
+              if release.get("tag_name") != tag
+          ]
+          for release in old_stable:
+              old_tag = release.get("tag_name")
+              if not old_tag:
+                  continue
+              for asset in release.get("assets") or []:
+                  name = asset.get("name")
+                  if not isinstance(name, str):
+                      continue
+                  lowered = name.lower()
+                  if (
+                      installable_re.search(name)
+                      or signed_re.search(name)
+                      or lowered in {
+                          "latest.json",
+                          "sha256sums",
+                          "sha256sums.txt",
+                          "sha512sums",
+                          "sha512sums.txt",
+                      }
+                  ):
+                      gh_run(["release", "delete-asset", old_tag, name, "-R", repo, "--yes"])
+          PY
