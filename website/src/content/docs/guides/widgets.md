@@ -44,7 +44,7 @@ claude-dashboard provides 40 widgets organized by category. Each widget can be i
 | Widget | Description |
 |--------|-------------|
 | `toolActivity` | Running/completed tools with target display (e.g., `Read(app.ts)`, `Bash(npm test)`) |
-| `agentStatus` | Subagent progress |
+| `agentStatus` | Subagent progress with resolved model, e.g. `Explore(Opus)` |
 | `todoProgress` | Todo completion rate |
 
 ## Analytics
@@ -53,7 +53,11 @@ claude-dashboard provides 40 widgets organized by category. Each widget can be i
 |--------|-------------|
 | `burnRate` | Token consumption per minute |
 | `tokenSpeed` | Output token generation speed (e.g., `67 tok/s`) |
-| `cacheHit` | Cache hit rate percentage |
+| `cacheHit` | Cache hit rate percentage (last request) |
+| `promptCache` | Session prompt-cache health: ♨️ warm with time left before it goes cold / ❄️ cold, hit ratio, miss count (Claude Code ≥ 2.1.251) |
+| `promptCacheState` | Warm/cold icon + time left only (sub-widget of `promptCache`) |
+| `promptCacheHit` | Session cache hit ratio only (sub-widget of `promptCache`) |
+| `promptCacheMisses` | Miss count only (sub-widget of `promptCache`) |
 | `depletionTime` | Estimated time to rate limit (approx) [1] |
 
 ## Multi-CLI

@@ -35,6 +35,12 @@ import { todoProgressWidget } from './todo-progress.js';
 import { burnRateWidget } from './burn-rate.js';
 import { depletionTimeWidget } from './depletion-time.js';
 import { cacheHitWidget } from './cache-hit.js';
+import {
+  promptCacheWidget,
+  promptCacheStateWidget,
+  promptCacheHitWidget,
+  promptCacheMissesWidget,
+} from './prompt-cache.js';
 import { codexUsageWidget } from './codex-usage.js';
 import { geminiUsageWidget, geminiUsageAllWidget } from './gemini-usage.js';
 import { antigravityUsageWidget, antigravityUsageAllWidget } from './antigravity-usage.js';
@@ -81,6 +87,10 @@ const widgetRegistry = new Map<WidgetId, Widget>([
   ['burnRate', burnRateWidget],
   ['depletionTime', depletionTimeWidget],
   ['cacheHit', cacheHitWidget],
+  ['promptCache', promptCacheWidget],
+  ['promptCacheState', promptCacheStateWidget],
+  ['promptCacheHit', promptCacheHitWidget],
+  ['promptCacheMisses', promptCacheMissesWidget],
   ['codexUsage', codexUsageWidget],
   ['geminiUsage', geminiUsageWidget],
   ['geminiUsageAll', geminiUsageAllWidget],

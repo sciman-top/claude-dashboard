@@ -17,7 +17,7 @@ var DISPLAY_PRESETS = {
   detailed: [
     ["model", "context", "cost", "rateLimit5h", "rateLimit7d", "rateLimit7dSonnet", "rateLimit7dFable", "zaiUsage"],
     ["projectInfo", "sessionName", "sessionId", "sessionDuration", "burnRate", "tokenSpeed", "depletionTime", "todoProgress"],
-    ["configCounts", "toolActivity", "agentStatus", "cacheHit", "performance"],
+    ["configCounts", "toolActivity", "agentStatus", "cacheHit", "promptCache", "performance"],
     ["tokenBreakdown", "forecast", "budget", "todayCost"],
     ["codexUsage", "geminiUsage", "antigravityUsage", "linesChanged", "outputStyle", "version", "peakHours"],
     ["lastPrompt", "vimMode", "apiDuration", "tagStatus"]
@@ -43,6 +43,10 @@ var PRESET_CHAR_MAP = {
   B: "burnRate",
   E: "depletionTime",
   H: "cacheHit",
+  c: "promptCache",
+  w: "promptCacheState",
+  h: "promptCacheHit",
+  x: "promptCacheMisses",
   X: "codexUsage",
   G: "geminiUsage",
   "^": "antigravityUsage",
@@ -483,6 +487,8 @@ var ICON = {
   yellowCircle: "\u{1F7E1}\uFE0F",
   redCircle: "\u{1F534}\uFE0F",
   fire: "\u{1F525}\uFE0F",
+  hotSprings: "\u2668\uFE0F",
+  snowflake: "\u2744\uFE0F",
   speech: "\u{1F4AC}\uFE0F",
   target: "\u{1F3AF}\uFE0F",
   key: "\u{1F511}\uFE0F"
@@ -584,7 +590,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.32.0";
+var VERSION = "1.33.0";
 
 // scripts/utils/debug.ts
 var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
@@ -935,6 +941,7 @@ var en_default = {
     hooks: "Hooks",
     burnRate: "Rate",
     cache: "Cache",
+    cacheMiss: "miss",
     toLimit: "to",
     forecast: "Forecast",
     budget: "Budget",
@@ -995,6 +1002,7 @@ var ko_default = {
     hooks: "\uD6C5",
     burnRate: "\uC18C\uBAA8\uC728",
     cache: "\uCE90\uC2DC",
+    cacheMiss: "miss",
     toLimit: "\uD6C4",
     forecast: "\uC608\uCE21",
     budget: "\uC608\uC0B0",
@@ -1251,14 +1259,24 @@ var modelWidget = {
   id: "model",
   name: "Model",
   async getData(ctx) {
-    const { model } = ctx.stdin;
+    const { model, effort, fast_mode } = ctx.stdin;
     const modelId = model?.id || "";
-    const { effortLevel, fastMode } = await getModelSettings(modelId);
+    const liveEffort = isEffortLevel(effort?.level) ? effort.level : void 0;
+    const liveFastMode = typeof fast_mode === "boolean" ? fast_mode : void 0;
+    if (liveEffort !== void 0 && liveFastMode !== void 0) {
+      return {
+        id: modelId,
+        displayName: model?.display_name || "-",
+        effortLevel: liveEffort,
+        fastMode: liveFastMode
+      };
+    }
+    const settings = await getModelSettings(modelId);
     return {
       id: modelId,
       displayName: model?.display_name || "-",
-      effortLevel,
-      fastMode
+      effortLevel: liveEffort ?? settings.effortLevel,
+      fastMode: liveFastMode ?? settings.fastMode
     };
   },
   render(data) {
@@ -1907,7 +1925,7 @@ function processEntries(entries, existing) {
             input: block.input
           });
           existing.runningToolIds.add(block.id);
-          if (block.name === "Task") {
+          if (block.name === "Agent" || block.name === "Task") {
             existing.activeAgentIds.add(block.id);
           }
           if (block.name === "TaskCreate") {
@@ -2148,12 +2166,30 @@ function extractAgentStatus(transcript) {
     if (!tool)
       continue;
     const input = tool.input;
+    const subagentType = input?.subagent_type;
     active.push({
-      name: input?.subagent_type || "Agent",
-      description: input?.description
+      name: subagentType || "Agent",
+      description: input?.description,
+      model: resolveSubagentModel(subagentType, input?.model)
     });
   }
   return { active, completed: transcript.completedAgentCount };
+}
+var ENV_DEFAULT_SUBAGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "claude"]);
+function resolveSubagentModel(subagentType, explicitModel, env = process.env) {
+  if (subagentType === "fork")
+    return void 0;
+  const envModel = env.CLAUDE_CODE_SUBAGENT_MODEL?.trim() || void 0;
+  const force = env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE;
+  const forced = force === "1" || force === "true";
+  if (forced && envModel && subagentType !== "Explore")
+    return envModel;
+  if (explicitModel?.trim())
+    return explicitModel.trim();
+  if (envModel && subagentType && ENV_DEFAULT_SUBAGENT_TYPES.has(subagentType)) {
+    return envModel;
+  }
+  return void 0;
 }
 function getActiveSlashCommand(transcript) {
   return transcript.activeSlashCommand;
@@ -2210,7 +2246,9 @@ var agentStatusWidget = {
       );
     }
     const activeAgent = data.active[0];
-    const agentText = activeAgent.description ? `${activeAgent.name}: ${truncate(activeAgent.description, 20)}` : activeAgent.name;
+    const modelSuffix = activeAgent.model ? `(${shortenModelName(activeAgent.model)})` : "";
+    const label = `${activeAgent.name}${modelSuffix}`;
+    const agentText = activeAgent.description ? `${label}: ${truncate(activeAgent.description, 20)}` : label;
     const more = data.active.length > 1 ? ` +${data.active.length - 1}` : "";
     return `${colorize(ICON.robot, theme.info)} ${t.widgets.agent}: ${agentText}${more}`;
   }
@@ -2334,6 +2372,69 @@ var cacheHitWidget = {
     const color = getColorForPercent(100 - data.hitPercentage);
     return `${ICON.package} ${colorize(`${data.hitPercentage}%`, color)}`;
   }
+};
+
+// scripts/widgets/prompt-cache.ts
+async function getPromptCacheData(ctx) {
+  const cache = ctx.stdin.prompt_cache;
+  if (!cache || cache.caching_observed === false)
+    return null;
+  const ratio = cache.hit_ratio;
+  const hitPercentage = typeof ratio === "number" && Number.isFinite(ratio) ? clampPercent(ratio * 100) : void 0;
+  const misses = typeof cache.misses === "number" && cache.misses > 0 ? cache.misses : 0;
+  const expiresAt = typeof cache.expires_at === "number" && Number.isFinite(cache.expires_at) && cache.expires_at > 0 ? cache.expires_at * 1e3 : void 0;
+  return { warm: cache.warm === true, hitPercentage, misses, expiresAt };
+}
+function formatWarmTimeLeft(data, t) {
+  if (!data.warm || data.expiresAt === void 0)
+    return "";
+  const leftMs = data.expiresAt - Date.now();
+  if (leftMs <= 0)
+    return "";
+  if (leftMs < 6e4)
+    return `${Math.ceil(leftMs / 1e3)}${t.time.seconds}`;
+  return formatTimeRemaining(new Date(data.expiresAt), t);
+}
+function renderState(data, ctx) {
+  const icon = data.warm ? ICON.hotSprings : ICON.snowflake;
+  const timeLeft = formatWarmTimeLeft(data, ctx.translations);
+  return timeLeft ? `${icon} ${colorize(timeLeft, getTheme().secondary)}` : icon;
+}
+function renderHit(data) {
+  if (data.hitPercentage === void 0)
+    return "";
+  return colorize(`${data.hitPercentage}%`, getColorForPercent(100 - data.hitPercentage));
+}
+function renderMisses(data, ctx) {
+  if (data.misses === 0)
+    return "";
+  return colorize(`${ctx.translations.widgets.cacheMiss} ${data.misses}`, getTheme().warning);
+}
+var promptCacheWidget = {
+  id: "promptCache",
+  name: "Prompt Cache",
+  getData: getPromptCacheData,
+  render(data, ctx) {
+    return [renderState(data, ctx), renderHit(data), renderMisses(data, ctx)].filter(Boolean).join(" ");
+  }
+};
+var promptCacheStateWidget = {
+  id: "promptCacheState",
+  name: "Prompt Cache (State)",
+  getData: getPromptCacheData,
+  render: renderState
+};
+var promptCacheHitWidget = {
+  id: "promptCacheHit",
+  name: "Prompt Cache (Hit)",
+  getData: getPromptCacheData,
+  render: renderHit
+};
+var promptCacheMissesWidget = {
+  id: "promptCacheMisses",
+  name: "Prompt Cache (Misses)",
+  getData: getPromptCacheData,
+  render: renderMisses
 };
 
 // scripts/utils/codex-client.ts
@@ -4560,6 +4661,10 @@ var widgetRegistry = /* @__PURE__ */ new Map([
   ["burnRate", burnRateWidget],
   ["depletionTime", depletionTimeWidget],
   ["cacheHit", cacheHitWidget],
+  ["promptCache", promptCacheWidget],
+  ["promptCacheState", promptCacheStateWidget],
+  ["promptCacheHit", promptCacheHitWidget],
+  ["promptCacheMisses", promptCacheMissesWidget],
   ["codexUsage", codexUsageWidget],
   ["geminiUsage", geminiUsageWidget],
   ["geminiUsageAll", geminiUsageAllWidget],

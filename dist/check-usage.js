@@ -95,7 +95,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.32.0";
+var VERSION = "1.33.0";
 
 // scripts/utils/debug.ts
 var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
@@ -2115,6 +2115,8 @@ var ICON = {
   yellowCircle: "\u{1F7E1}\uFE0F",
   redCircle: "\u{1F534}\uFE0F",
   fire: "\u{1F525}\uFE0F",
+  hotSprings: "\u2668\uFE0F",
+  snowflake: "\u2744\uFE0F",
   speech: "\u{1F4AC}\uFE0F",
   target: "\u{1F3AF}\uFE0F",
   key: "\u{1F511}\uFE0F"
@@ -2159,6 +2161,7 @@ var en_default = {
     hooks: "Hooks",
     burnRate: "Rate",
     cache: "Cache",
+    cacheMiss: "miss",
     toLimit: "to",
     forecast: "Forecast",
     budget: "Budget",
@@ -2219,6 +2222,7 @@ var ko_default = {
     hooks: "\uD6C5",
     burnRate: "\uC18C\uBAA8\uC728",
     cache: "\uCE90\uC2DC",
+    cacheMiss: "miss",
     toLimit: "\uD6C4",
     forecast: "\uC608\uCE21",
     budget: "\uC608\uC0B0",
