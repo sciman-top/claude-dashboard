@@ -57,7 +57,7 @@ Configure the claude-dashboard status line plugin with widget system support.
 | `toolActivity` | Running/completed tools with targets (e.g., `Read(app.ts)`) |
 | `agentStatus` | Subagent progress |
 | `todoProgress` | Todo completion rate |
-| `burnRate` | Token consumption per minute |
+| `burnRate` | Token consumption per minute, session average (input + cache write + output) |
 | `cacheHit` | Cache hit rate percentage (last request) |
 | `promptCache` | Session prompt-cache health: ♨️ warm with time left before it goes cold / ❄️ cold, hit ratio, miss count (Claude Code ≥ 2.1.251) |
 | `promptCacheState` | Warm/cold icon + time left only (sub-widget of `promptCache`) |

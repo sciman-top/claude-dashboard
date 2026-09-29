@@ -279,13 +279,13 @@ Agent: 3 done
 | Property | Value |
 |----------|-------|
 | **Widget ID** | `burnRate` |
-| **Data Source** | stdin (tokens) + session duration |
-| **Description** | Calculates and displays the token consumption rate per minute based on session average. |
+| **Data Source** | transcript (per-request usage) + session duration |
+| **Description** | Session-average token consumption per minute: input + cache write + output tokens of every main-conversation request, summed from the transcript, over the session's elapsed time. Cache reads are excluded — they re-read the whole prompt prefix on every call, so counting them tracks context size rather than spend. Subagent requests are not included. Shows `0/min` at session start. |
 
 **Example output:**
 ```
-5K/m
-12K/m
+🔥 5K/min
+🔥 12K/min
 ```
 
 ### tokenSpeed
