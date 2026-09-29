@@ -11,7 +11,7 @@ claude-dashboard는 49개의 위젯을 제공합니다. 각 위젯은 독립적�
 
 | 위젯 | ID | 설명 |
 |------|-----|------|
-| 모델 | `model` | 모델 이름과 이모지, Opus/Sonnet/Fable effort 수준(MAX/X/H/M/L), Opus 빠른 모드(↯) |
+| 모델 | `model` | 모델 이름·버전과 이모지(예: `Opus 5.5`), Opus/Sonnet/Fable effort 수준(MAX/X/H/M/L), Opus 빠른 모드(↯) |
 | 컨텍스트 | `context` | 프로그레스 바, 백분율, 토큰 수 (🟢 0-50% / 🟡 51-80% / 🔴 81-100%) |
 | 컨텍스트 바 | `contextBar` | 프로그레스 바만 (`context`의 서브 위젯) |
 | 컨텍스트 백분율 | `contextPercentage` | 백분율만 (`context`의 서브 위젯) |

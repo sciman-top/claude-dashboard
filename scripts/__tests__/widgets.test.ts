@@ -112,6 +112,11 @@ function createStdin(overrides: Partial<StdinInput> = {}): StdinInput {
   return { ...MOCK_STDIN, ...overrides };
 }
 
+/** Rendered widget text without ANSI color codes. */
+function stripAnsi(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
 function createContext(
   stdinOverrides: Partial<StdinInput> = {},
   configOverrides: Partial<Config> = {}
@@ -193,6 +198,16 @@ describe('widgets', () => {
       expect(data).not.toBeNull();
       expect(data?.id).toBe('claude-sonnet-3.5');
       expect(data?.displayName).toBe('Claude 3.5 Sonnet');
+    });
+
+    // #98: sessions still on an older release must be distinguishable at a glance.
+    it('should render the model version before the badges', () => {
+      const ctx = createContext();
+
+      expect(stripAnsi(modelWidget.render(createModelData({ displayName: 'Opus 5.5', effortLevel: 'medium', fastMode: true }), ctx))).toBe('◆ Opus 5.5(M) ↯');
+      expect(stripAnsi(modelWidget.render(createModelData({ displayName: 'Opus 5 (1M context)', effortLevel: 'high' }), ctx))).toBe('◆ Opus 5(H)');
+      expect(stripAnsi(modelWidget.render(createModelData({ displayName: 'Haiku 4.5' }), ctx))).toBe('◆ Haiku 4.5');
+      expect(stripAnsi(modelWidget.render(createModelData({ displayName: 'Claude Opus', effortLevel: 'high' }), ctx))).toBe('◆ Opus(H)');
     });
 
     it('should render shortened model name with effort for Sonnet', () => {
@@ -1202,8 +1217,7 @@ describe('widgets', () => {
           { warm: true, hitPercentage: 91, misses: 2, expiresAt: NOW + 4 * 60_000 + 30_000 },
           ctx
         );
-        const plain = result.replace(/\x1b\[[0-9;]*m/g, '');
-        expect(plain).toBe(`${ICON.hotSprings} 4m 91% miss 2`);
+        expect(stripAnsi(result)).toBe(`${ICON.hotSprings} 4m 91% miss 2`);
       });
 
       it('should show seconds in the last minute', () => {

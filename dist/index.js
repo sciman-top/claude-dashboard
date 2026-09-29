@@ -1088,21 +1088,40 @@ function formatTimeRemaining(resetAt, t) {
   }
   return `${minutes}${t.time.minutes}`;
 }
-function shortenModelName(displayName) {
+var MODEL_FAMILIES = ["Opus", "Sonnet", "Haiku", "Fable"];
+var PARENTHETICAL = /\([^)]*\)/g;
+var VERSION_WORD = /^\d+(\.\d+)?$/;
+var ID_VERSION = "(\\d{1,2})(?:[-.](\\d{1,2}))?(?!\\d)";
+var ID_PATTERNS = new Map(
+  MODEL_FAMILIES.map((f) => {
+    const key = f.toLowerCase();
+    return [key, [new RegExp(`${key}-${ID_VERSION}`), new RegExp(`claude-${ID_VERSION}-${key}`)]];
+  })
+);
+function parseModelName(displayName) {
   const lower = displayName.toLowerCase();
-  if (lower.includes("opus"))
-    return "Opus";
-  if (lower.includes("sonnet"))
-    return "Sonnet";
-  if (lower.includes("haiku"))
-    return "Haiku";
-  if (lower.includes("fable"))
-    return "Fable";
-  const parts = displayName.split(/\s+/);
-  if (parts.length > 1 && parts[0].toLowerCase() === "claude") {
-    return parts[1];
+  const family = MODEL_FAMILIES.find((f) => lower.includes(f.toLowerCase()));
+  if (!family) {
+    const parts = displayName.split(/\s+/);
+    if (parts.length > 1 && parts[0].toLowerCase() === "claude")
+      return { family: parts[1] };
+    return { family: displayName };
   }
-  return displayName;
+  return { family, version: extractVersion(lower, family.toLowerCase()) };
+}
+function extractVersion(lower, family) {
+  const word = lower.replace(PARENTHETICAL, " ").split(/\s+/).find((w) => VERSION_WORD.test(w));
+  if (word)
+    return word;
+  for (const pattern of ID_PATTERNS.get(family) ?? []) {
+    const match = lower.match(pattern);
+    if (match)
+      return match[2] ? `${match[1]}.${match[2]}` : match[1];
+  }
+  return void 0;
+}
+function shortenModelName(displayName) {
+  return parseModelName(displayName).family;
 }
 function calculatePercent(current, total) {
   if (total <= 0)
@@ -1284,12 +1303,13 @@ var modelWidget = {
     };
   },
   render(data) {
-    const shortName = shortenModelName(data.displayName);
+    const { family, version } = parseModelName(data.displayName);
+    const name = version ? `${family} ${version}` : family;
     const icon = isZaiProvider() ? ICON.orangeCircle : "\u25C6";
-    const supportsEffort = shortName === "Opus" || shortName === "Sonnet" || shortName === "Fable";
+    const supportsEffort = family === "Opus" || family === "Sonnet" || family === "Fable";
     const effortSuffix = supportsEffort ? `(${EFFORT_BADGE[data.effortLevel]})` : "";
-    const fastIndicator = shortName === "Opus" && data.fastMode ? " \u21AF" : "";
-    return `${getTheme().model}${icon} ${shortName}${effortSuffix}${fastIndicator}${RESET}`;
+    const fastIndicator = family === "Opus" && data.fastMode ? " \u21AF" : "";
+    return `${getTheme().model}${icon} ${name}${effortSuffix}${fastIndicator}${RESET}`;
   }
 };
 

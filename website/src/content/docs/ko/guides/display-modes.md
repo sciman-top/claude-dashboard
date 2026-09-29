@@ -20,7 +20,7 @@ claude-dashboard는 세 가지 프리셋 디스플레이 모드와 커스텀 모
 > `peakHours`는 detailed 모드(5줄)에서만 기본 포함됩니다. 프리셋 단축키(`p`)로 다른 모드에도 추가할 수 있습니다.
 
 ```
-◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
 ```
 
 > `rateLimit*` 위젯과 `zaiUsage` 위젯은 프로바이더에 따라 자동으로 표시됩니다 (상호 배타적).
@@ -37,7 +37,7 @@ Compact의 모든 위젯에 프로젝트 정보와 세션 관련 위젯을 추�
 **2줄:** projectInfo, sessionId, sessionDuration, burnRate, todoProgress
 
 ```
-◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
 📁 project (main ↑3) │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ✓ 3/5
 ```
 
@@ -57,7 +57,7 @@ Compact의 모든 위젯에 프로젝트 정보와 세션 관련 위젯을 추�
 **6줄:** lastPrompt, vimMode, apiDuration, tagStatus
 
 ```
-◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
 📁 project (main ↑3) │ » feature-auth │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ⚡ 67 tok/s │ ⏳ 2h │ ✓ 3/5
 CLAUDE.md: 2 │ ⚙️ Read(app.ts) (12 done) │ 🤖 Agent: 1 │ 📦 85% │ 🟢 72%
 📊 In 30K · Out 8K │ 📈 ~$8/h │ 💵 $5/$15 │ 💰 오늘: $4.83
