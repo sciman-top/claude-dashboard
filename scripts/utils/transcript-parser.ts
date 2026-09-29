@@ -246,7 +246,7 @@ function isMeasured(outputTokens: number, durationMs?: number): boolean {
   return outputTokens > 0 && durationMs !== undefined && durationMs > 0;
 }
 
-/** Non-negative finite token count, or 0. */
+/** Positive finite token count, or 0 for missing, invalid, or zero values. */
 function tokenCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }

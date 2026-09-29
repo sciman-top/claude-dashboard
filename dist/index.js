@@ -2348,24 +2348,16 @@ var burnRateWidget = {
   id: "burnRate",
   name: "Burn Rate",
   async getData(ctx) {
-    let elapsedMinutes;
-    try {
-      elapsedMinutes = await getSessionElapsedMinutes(ctx, 0);
-    } catch (error) {
-      debugLog("burnRate", "Failed to get session elapsed time", error);
-      return null;
-    }
-    if (elapsedMinutes === null)
-      return null;
     const transcript = await getTranscript(ctx);
     if (!transcript)
       return null;
-    const { sessionConsumedTokens } = transcript;
-    if (elapsedMinutes === 0 || sessionConsumedTokens === 0) {
+    const { sessionConsumedTokens, sessionStartTime } = transcript;
+    const elapsedMinutes = sessionStartTime ? (Date.now() - sessionStartTime) / 6e4 : 0;
+    if (elapsedMinutes <= 0 || sessionConsumedTokens === 0) {
       return { tokensPerMinute: 0 };
     }
     const tokensPerMinute = sessionConsumedTokens / elapsedMinutes;
-    return Number.isFinite(tokensPerMinute) && tokensPerMinute >= 0 ? { tokensPerMinute } : null;
+    return Number.isFinite(tokensPerMinute) ? { tokensPerMinute } : null;
   },
   render(data, _ctx) {
     return `${ICON.fire} ${formatTokens(Math.round(data.tokensPerMinute))}/min`;

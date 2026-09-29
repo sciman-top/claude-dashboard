@@ -1291,6 +1291,24 @@ describe('transcript-parser', () => {
       expect(transcript!.sessionConsumedTokens).toBe(910);
     });
 
+    it('counts consumption once for a response split across incremental reads', async () => {
+      const usage = (output: number) => ({ input_tokens: 5, cache_creation_input_tokens: 300, output_tokens: output });
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:01.000Z', message: { id: 'msg_a', usage: usage(0) } },
+      ]);
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      await parseTranscript(TEST_FILE);
+
+      await appendFile(
+        TEST_FILE,
+        '\n' + JSON.stringify({ type: 'assistant', timestamp: '2024-01-01T00:00:03.000Z', message: { id: 'msg_a', usage: usage(700) } }) + '\n'
+      );
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionConsumedTokens).toBe(1005);
+    });
+
     it('counts consumption for a response with no measurable span', async () => {
       await writeTranscript([
         { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { input_tokens: 10, output_tokens: 90 } } },
