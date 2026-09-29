@@ -637,7 +637,7 @@ describe('widgets', () => {
 
     it('should not set subPath when current_dir is a sibling with same prefix', async () => {
       const ctx = createContext({
-        workspace: { current_dir: '/home/user/proj-backup/src', project_dir: '/home/user/proj' },
+        workspace: { current_dir: '/tmp/proj-backup/src', project_dir: '/tmp/proj' },
       });
       const data = await projectInfoWidget.getData(ctx);
 
