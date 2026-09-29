@@ -96,6 +96,12 @@ describe('formatters', () => {
       expect(parseModelName('claude-fable-5')).toEqual({ family: 'Fable', version: '5' });
       expect(parseModelName('claude-sonnet-4-20250514')).toEqual({ family: 'Sonnet', version: '4' });
       expect(parseModelName('claude-3-5-sonnet-20241022')).toEqual({ family: 'Sonnet', version: '3.5' });
+      expect(parseModelName('claude-3-opus-20240229')).toEqual({ family: 'Opus', version: '3' });
+    });
+
+    it('reads dotted versions in id-shaped names', () => {
+      expect(parseModelName('claude-sonnet-3.5')).toEqual({ family: 'Sonnet', version: '3.5' });
+      expect(parseModelName('claude-opus-5.5')).toEqual({ family: 'Opus', version: '5.5' });
     });
 
     it('omits the version when there is none', () => {

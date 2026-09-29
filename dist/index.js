@@ -1089,6 +1089,15 @@ function formatTimeRemaining(resetAt, t) {
   return `${minutes}${t.time.minutes}`;
 }
 var MODEL_FAMILIES = ["Opus", "Sonnet", "Haiku", "Fable"];
+var PARENTHETICAL = /\([^)]*\)/g;
+var VERSION_WORD = /^\d+(\.\d+)?$/;
+var ID_VERSION = "(\\d{1,2})(?:[-.](\\d{1,2}))?(?!\\d)";
+var ID_PATTERNS = new Map(
+  MODEL_FAMILIES.map((f) => {
+    const key = f.toLowerCase();
+    return [key, [new RegExp(`${key}-${ID_VERSION}`), new RegExp(`claude-${ID_VERSION}-${key}`)]];
+  })
+);
 function parseModelName(displayName) {
   const lower = displayName.toLowerCase();
   const family = MODEL_FAMILIES.find((f) => lower.includes(f.toLowerCase()));
@@ -1101,15 +1110,15 @@ function parseModelName(displayName) {
   return { family, version: extractVersion(lower, family.toLowerCase()) };
 }
 function extractVersion(lower, family) {
-  const words = lower.replace(/\([^)]*\)/g, " ").split(/\s+/);
-  const word = words.find((w) => /^\d+(\.\d+)?$/.test(w));
+  const word = lower.replace(PARENTHETICAL, " ").split(/\s+/).find((w) => VERSION_WORD.test(w));
   if (word)
     return word;
-  const part = "(\\d{1,2})(?:-(\\d{1,2}))?(?![\\d])";
-  const match = lower.match(new RegExp(`${family}-${part}`)) ?? lower.match(new RegExp(`claude-${part}-${family}`));
-  if (!match)
-    return void 0;
-  return match[2] ? `${match[1]}.${match[2]}` : match[1];
+  for (const pattern of ID_PATTERNS.get(family) ?? []) {
+    const match = lower.match(pattern);
+    if (match)
+      return match[2] ? `${match[1]}.${match[2]}` : match[1];
+  }
+  return void 0;
 }
 function shortenModelName(displayName) {
   return parseModelName(displayName).family;

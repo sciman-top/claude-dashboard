@@ -1104,6 +1104,14 @@ function formatTimeRemaining(resetAt, t) {
   }
   return `${minutes}${t.time.minutes}`;
 }
+var MODEL_FAMILIES = ["Opus", "Sonnet", "Haiku", "Fable"];
+var ID_VERSION = "(\\d{1,2})(?:[-.](\\d{1,2}))?(?!\\d)";
+var ID_PATTERNS = new Map(
+  MODEL_FAMILIES.map((f) => {
+    const key = f.toLowerCase();
+    return [key, [new RegExp(`${key}-${ID_VERSION}`), new RegExp(`claude-${ID_VERSION}-${key}`)]];
+  })
+);
 function clampPercent(value) {
   return Math.min(100, Math.max(0, Math.round(value)));
 }

@@ -56,6 +56,18 @@ export function formatTimeRemaining(resetAt: string | Date, t: Translations): st
 
 const MODEL_FAMILIES = ['Opus', 'Sonnet', 'Haiku', 'Fable'] as const;
 
+const PARENTHETICAL = /\([^)]*\)/g;
+const VERSION_WORD = /^\d+(\.\d+)?$/;
+// One- or two-digit parts, "-" or "." separated, so date suffixes never read as versions.
+const ID_VERSION = '(\\d{1,2})(?:[-.](\\d{1,2}))?(?!\\d)';
+/** Per family: family-first ids ("claude-opus-4-8") and version-first ids ("claude-3-5-sonnet"). */
+const ID_PATTERNS = new Map(
+  MODEL_FAMILIES.map((f) => {
+    const key = f.toLowerCase();
+    return [key, [new RegExp(`${key}-${ID_VERSION}`), new RegExp(`claude-${ID_VERSION}-${key}`)]] as const;
+  })
+);
+
 /**
  * Split a model name into its family and version.
  * Examples: "Opus 5.5" -> { Opus, 5.5 }, "Opus 5 (1M context)" -> { Opus, 5 },
@@ -78,17 +90,15 @@ export function parseModelName(displayName: string): { family: string; version?:
 function extractVersion(lower: string, family: string): string | undefined {
   // Display names: a standalone number, either side of the family ("Opus 5.5",
   // "Claude 3.5 Sonnet"). Parentheticals such as "(1M context)" are not versions.
-  const words = lower.replace(/\([^)]*\)/g, ' ').split(/\s+/);
-  const word = words.find((w) => /^\d+(\.\d+)?$/.test(w));
+  const word = lower.replace(PARENTHETICAL, ' ').split(/\s+/).find((w) => VERSION_WORD.test(w));
   if (word) return word;
 
-  // Model ids: "claude-opus-4-8", "claude-3-5-sonnet-20241022". One- or two-digit
-  // parts only, so date suffixes are never read as versions.
-  const part = '(\\d{1,2})(?:-(\\d{1,2}))?(?![\\d])';
-  const match =
-    lower.match(new RegExp(`${family}-${part}`)) ?? lower.match(new RegExp(`claude-${part}-${family}`));
-  if (!match) return undefined;
-  return match[2] ? `${match[1]}.${match[2]}` : match[1];
+  // Model ids: "claude-opus-4-8", "claude-sonnet-3.5", "claude-3-5-sonnet-20241022".
+  for (const pattern of ID_PATTERNS.get(family) ?? []) {
+    const match = lower.match(pattern);
+    if (match) return match[2] ? `${match[1]}.${match[2]}` : match[1];
+  }
+  return undefined;
 }
 
 /**
