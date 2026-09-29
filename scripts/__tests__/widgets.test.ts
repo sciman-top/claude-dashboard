@@ -144,7 +144,9 @@ function createTranscript(overrides: Partial<ParsedTranscript> = {}): ParsedTran
     activeSlashCommand: null,
     sessionOutputTokens: 0,
     sessionRequestMs: 0,
+    sessionConsumedTokens: 0,
     lastRequestOutput: 0,
+    lastRequestInput: 0,
     ...overrides,
   };
 }
@@ -919,17 +921,47 @@ describe('widgets', () => {
       expect(burnRateWidget.name).toBe('Burn Rate');
     });
 
-    it('should return 0 when usage is missing', async () => {
+    // stdin's current_usage is the last request only (and includes cache reads), so
+    // dividing it by session minutes gave "context size over time", not a burn rate.
+    it('should divide the session total by elapsed minutes, ignoring current_usage', async () => {
+      vi.spyOn(sessionUtils, 'getSessionElapsedMinutes').mockResolvedValue(10);
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(
+        createTranscript({ sessionConsumedTokens: 50000 })
+      );
       const ctx = createContext({
         context_window: {
           total_input_tokens: 0,
           total_output_tokens: 0,
           context_window_size: 200000,
-          current_usage: null,
+          current_usage: {
+            input_tokens: 5,
+            output_tokens: 200,
+            cache_creation_input_tokens: 300,
+            cache_read_input_tokens: 90000,
+          },
         },
       });
-      const data = await burnRateWidget.getData(ctx);
-      expect(data).toEqual({ tokensPerMinute: 0 });
+      expect(await burnRateWidget.getData(ctx)).toEqual({ tokensPerMinute: 5000 });
+    });
+
+    it('should return 0 at session start', async () => {
+      vi.spyOn(sessionUtils, 'getSessionElapsedMinutes').mockResolvedValue(0);
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(
+        createTranscript({ sessionConsumedTokens: 50000 })
+      );
+      expect(await burnRateWidget.getData(createContext())).toEqual({ tokensPerMinute: 0 });
+    });
+
+    it('should return 0 before any tokens are consumed', async () => {
+      vi.spyOn(sessionUtils, 'getSessionElapsedMinutes').mockResolvedValue(10);
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(createTranscript());
+      expect(await burnRateWidget.getData(createContext())).toEqual({ tokensPerMinute: 0 });
+    });
+
+    it('should return null when the transcript is unavailable', async () => {
+      vi.spyOn(sessionUtils, 'getSessionElapsedMinutes').mockResolvedValue(10);
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(null);
+      expect(await burnRateWidget.getData(createContext())).toBeNull();
     });
 
     it('should render burn rate with tokens per minute', () => {

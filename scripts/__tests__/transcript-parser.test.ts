@@ -1267,6 +1267,56 @@ describe('transcript-parser', () => {
       expect(transcript!.sessionRequestMs).toBe(4000);
     });
 
+    // burnRate consumption: input + cache write + output, cache reads excluded, each
+    // response once at its final values even though usage repeats on every record.
+    it('sums consumed tokens once per response, excluding cache reads', async () => {
+      const usage = (output: number) => ({
+        input_tokens: 5,
+        cache_creation_input_tokens: 300,
+        cache_read_input_tokens: 90000,
+        output_tokens: output,
+      });
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'one' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:01.000Z', message: { id: 'msg_a', usage: usage(0) } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:02.000Z', message: { id: 'msg_a', usage: usage(200) } },
+        { type: 'user', timestamp: '2024-01-01T00:00:03.000Z', message: { content: 'two' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:04.000Z', message: { id: 'msg_b', usage: usage(100) } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      // (5 + 300 + 200) + (5 + 300 + 100)
+      expect(transcript!.sessionConsumedTokens).toBe(910);
+    });
+
+    it('counts consumption for a response with no measurable span', async () => {
+      await writeTranscript([
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { input_tokens: 10, output_tokens: 90 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionConsumedTokens).toBe(100);
+      expect(transcript!.sessionOutputTokens).toBe(0);
+    });
+
+    it('ignores non-finite token counts', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:02.000Z', message: { id: 'msg_a', usage: { input_tokens: 10, output_tokens: 400 } } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:03.000Z', message: { id: 'msg_a', usage: { input_tokens: -1, output_tokens: 1e400 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.lastRequestOutput).toBe(400);
+      expect(transcript!.sessionConsumedTokens).toBe(410);
+    });
+
     it('ignores sidechain records', async () => {
       await writeTranscript([
         { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },

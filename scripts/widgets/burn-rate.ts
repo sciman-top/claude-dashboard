@@ -1,5 +1,6 @@
 /**
- * Burn rate widget - displays tokens consumed per minute
+ * Burn rate widget - displays tokens consumed per minute (session average)
+ * Consumption = input + cache write + output, summed from the transcript.
  * @handbook 3.3-widget-data-sources
  * @tested scripts/__tests__/widgets.test.ts
  */
@@ -10,14 +11,13 @@ import { ICON } from '../utils/emoji.js';
 import { formatTokens } from '../utils/formatters.js';
 import { getSessionElapsedMinutes } from '../utils/session.js';
 import { debugLog } from '../utils/debug.js';
+import { getTranscript } from '../utils/transcript-parser.js';
 
 export const burnRateWidget: Widget<BurnRateData> = {
   id: 'burnRate',
   name: 'Burn Rate',
 
   async getData(ctx: WidgetContext): Promise<BurnRateData | null> {
-    const usage = ctx.stdin.context_window?.current_usage;
-
     let elapsedMinutes: number | null;
     try {
       elapsedMinutes = await getSessionElapsedMinutes(ctx, 0);
@@ -27,30 +27,18 @@ export const burnRateWidget: Widget<BurnRateData> = {
     }
     if (elapsedMinutes === null) return null;
 
-    // Show 0/min at session start or when no usage data
-    if (!usage || elapsedMinutes === 0) {
+    // stdin's current_usage covers the last request only (and counts cache reads), so
+    // the session total comes from the transcript. See accountTokens for what counts.
+    const transcript = await getTranscript(ctx);
+    if (!transcript) return null;
+
+    const { sessionConsumedTokens } = transcript;
+    if (elapsedMinutes === 0 || sessionConsumedTokens === 0) {
       return { tokensPerMinute: 0 };
     }
 
-    const totalTokens =
-      usage.input_tokens +
-      usage.output_tokens +
-      usage.cache_creation_input_tokens +
-      usage.cache_read_input_tokens;
-
-    // Show 0/min if no tokens used yet
-    if (totalTokens === 0) {
-      return { tokensPerMinute: 0 };
-    }
-
-    const tokensPerMinute = totalTokens / elapsedMinutes;
-
-    // Guard against invalid values
-    if (!Number.isFinite(tokensPerMinute) || tokensPerMinute < 0) {
-      return null;
-    }
-
-    return { tokensPerMinute };
+    const tokensPerMinute = sessionConsumedTokens / elapsedMinutes;
+    return Number.isFinite(tokensPerMinute) && tokensPerMinute >= 0 ? { tokensPerMinute } : null;
   },
 
   render(data: BurnRateData, _ctx: WidgetContext): string {
