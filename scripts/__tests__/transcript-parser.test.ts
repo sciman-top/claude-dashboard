@@ -1378,6 +1378,13 @@ describe('transcript-parser', () => {
       JSON.stringify({ type: 'assistant', timestamp: t, message: { id, usage: { output_tokens: out } } });
     const user = (t: string) => JSON.stringify({ type: 'user', timestamp: t, message: { content: 'hi' } });
 
+    /** Path of the persisted parse state (FILE_CACHE_DIR is under the mocked homedir). */
+    async function stateFilePath(): Promise<string> {
+      const dir = path.join(TEST_DIR, '.cache', 'claude-dashboard');
+      const [file] = (await readdir(dir)).filter((f) => f.startsWith('transcript-'));
+      return path.join(dir, file);
+    }
+
     // Each status line render is a new process; a fresh module simulates that.
     async function freshParse() {
       vi.resetModules();
@@ -1391,10 +1398,7 @@ describe('transcript-parser', () => {
       await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + entry('msg_a', 100, '2024-01-01T00:00:02.000Z') + '\n');
       await freshParse();
 
-      const [stateFile] = (await readdir(path.join(TEST_DIR, '.cache', 'claude-dashboard'))).filter((f) =>
-        f.startsWith('transcript-')
-      );
-      const statePath = path.join(TEST_DIR, '.cache', 'claude-dashboard', stateFile);
+      const statePath = await stateFilePath();
       const persisted = JSON.parse(await readFile(statePath, 'utf-8'));
       persisted.data.state.data.sessionOutputTokens = 10000;
       await writeFile(statePath, JSON.stringify(persisted));
@@ -1422,6 +1426,34 @@ describe('transcript-parser', () => {
       expect(transcript!.runningToolIds.has('tool_1')).toBe(true);
       expect(transcript!.toolUses).toBeInstanceOf(Map);
       expect(transcript!.toolUses.get('tool_1')?.name).toBe('Read');
+    });
+
+    // toolUses is saved with the state; a running Write/Agent must not drag its body or
+    // prompt into every save, while the fields widgets read must survive the round-trip.
+    it('persists only the tool input fields consumers read', async () => {
+      const body = 'x'.repeat(50_000);
+      await writeFile(
+        TEST_FILE,
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          message: {
+            id: 'msg_a',
+            content: [
+              { type: 'tool_use', id: 'w1', name: 'Write', input: { file_path: '/src/app.ts', content: body } },
+              { type: 'tool_use', id: 'a1', name: 'Agent', input: { description: 'scan', subagent_type: 'scout', model: 'haiku', prompt: body } },
+            ],
+          },
+        }) + '\n'
+      );
+      await freshParse();
+
+      expect((await readFile(await stateFilePath(), 'utf-8')).length).toBeLessThan(5_000);
+
+      const { getRunningTools, extractAgentStatus } = await import('../utils/transcript-parser.js');
+      const transcript = await freshParse();
+      expect(getRunningTools(transcript!).find((t) => t.name === 'Write')?.target).toBe('app.ts');
+      expect(extractAgentStatus(transcript!).active[0]).toMatchObject({ name: 'scout', description: 'scan', model: 'haiku' });
     });
 
     it('leaves a half-written trailing line for the next read', async () => {

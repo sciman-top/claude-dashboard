@@ -121,7 +121,8 @@ function processEntries(
           existing.toolUses.set(block.id, {
             name: block.name,
             timestamp: entry.timestamp,
-            input: block.input,
+            target: extractToolTarget(block.name, block.input),
+            input: retainToolInput(block.name, block.input),
           });
           existing.runningToolIds.add(block.id);
 
@@ -390,6 +391,7 @@ async function loadPersistedState(transcriptPath: string): Promise<TranscriptSta
     };
     const persisted = entry.data;
     if (persisted?.signature !== STATE_SIGNATURE || !persisted.state) return null;
+    // Guards the (practically impossible) hash collision between two transcript paths.
     if (persisted.state.path !== transcriptPath) return null;
     return persisted.state;
   } catch {
@@ -397,6 +399,11 @@ async function loadPersistedState(transcriptPath: string): Promise<TranscriptSta
   }
 }
 
+/**
+ * Written only when new lines were parsed, so the 1-hour cleanup sweep removes the
+ * state of a transcript idle for over an hour; the next render then re-parses once.
+ * Accepted: correct either way, and cheaper than touching the file on every render.
+ */
 async function persistState(state: TranscriptState): Promise<void> {
   // saveFileCache stringifies without a replacer, so pre-serialize the Maps and Sets.
   const payload = JSON.parse(JSON.stringify({ signature: STATE_SIGNATURE, state }, stateReplacer));
@@ -455,6 +462,9 @@ async function readHead(filePath: string, parsedSize: number): Promise<string> {
 /** Whether `state` still describes the file: not truncated, same leading bytes. */
 async function isResumable(state: TranscriptState, fileSize: number): Promise<boolean> {
   if (state.size > fileSize) return false;
+  // Nothing parsed yet, or nothing new to read: skip the head read. A same-size
+  // replacement is not worth an extra read on every render.
+  if (state.size === 0 || state.size === fileSize) return true;
   return state.head === (await readHead(state.path, state.size));
 }
 
@@ -490,6 +500,26 @@ export async function parseTranscript(
     return state.data;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The part of a tool's input that consumers read after the tool_use record: Agent/Task
+ * metadata for agentStatus, the todo list for todoProgress. Everything else is dropped,
+ * because toolUses is persisted with the parse state and a running (or never-answered)
+ * Write/Edit/Agent call would otherwise carry its whole body or prompt into every save.
+ */
+function retainToolInput(name: string, input: unknown): unknown {
+  if (!input || typeof input !== 'object') return undefined;
+  const inp = input as Record<string, unknown>;
+  switch (name) {
+    case 'Agent':
+    case 'Task':
+      return { description: inp.description, subagent_type: inp.subagent_type, model: inp.model };
+    case 'TodoWrite':
+      return { todos: inp.todos };
+    default:
+      return undefined;
   }
 }
 
@@ -533,7 +563,7 @@ export function getRunningTools(
       startTime: tool.timestamp
         ? new Date(tool.timestamp).getTime()
         : Date.now(),
-      target: extractToolTarget(tool.name, tool.input),
+      target: tool.target,
     });
   }
 

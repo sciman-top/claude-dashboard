@@ -1932,7 +1932,8 @@ function processEntries(entries, existing) {
           existing.toolUses.set(block.id, {
             name: block.name,
             timestamp: entry.timestamp,
-            input: block.input
+            target: extractToolTarget(block.name, block.input),
+            input: retainToolInput(block.name, block.input)
           });
           existing.runningToolIds.add(block.id);
           if (block.name === "Agent" || block.name === "Task") {
@@ -2165,6 +2166,8 @@ async function readHead(filePath, parsedSize) {
 async function isResumable(state, fileSize) {
   if (state.size > fileSize)
     return false;
+  if (state.size === 0 || state.size === fileSize)
+    return true;
   return state.head === await readHead(state.path, state.size);
 }
 async function parseTranscript(transcriptPath) {
@@ -2189,6 +2192,20 @@ async function parseTranscript(transcriptPath) {
     return state.data;
   } catch {
     return null;
+  }
+}
+function retainToolInput(name, input) {
+  if (!input || typeof input !== "object")
+    return void 0;
+  const inp = input;
+  switch (name) {
+    case "Agent":
+    case "Task":
+      return { description: inp.description, subagent_type: inp.subagent_type, model: inp.model };
+    case "TodoWrite":
+      return { todos: inp.todos };
+    default:
+      return void 0;
   }
 }
 function extractToolTarget(name, input) {
@@ -2218,7 +2235,7 @@ function getRunningTools(transcript) {
     running.push({
       name: tool.name,
       startTime: tool.timestamp ? new Date(tool.timestamp).getTime() : Date.now(),
-      target: extractToolTarget(tool.name, tool.input)
+      target: tool.target
     });
   }
   return running;
