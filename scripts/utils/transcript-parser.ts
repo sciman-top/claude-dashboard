@@ -48,7 +48,9 @@ function createParsedTranscript(): ParsedTranscript {
     activeSlashCommand: null,
     sessionOutputTokens: 0,
     sessionRequestMs: 0,
+    sessionConsumedTokens: 0,
     lastRequestOutput: 0,
+    lastRequestInput: 0,
   };
 }
 
@@ -239,8 +241,18 @@ function processEntries(
   }
 }
 
+/** A request counts toward session totals only once it has both output and a span. */
+function isMeasured(outputTokens: number, durationMs?: number): boolean {
+  return outputTokens > 0 && durationMs !== undefined && durationMs > 0;
+}
+
+/** Positive finite token count, or 0 for missing, invalid, or zero values. */
+function tokenCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 /**
- * Token accounting for the tokenSpeed / tokenSpeedLast widgets.
+ * Token accounting for the tokenSpeed / tokenSpeedLast / burnRate widgets.
  *
  * Both halves of each rate come from the main transcript. stdin's
  * cost.total_api_duration_ms is not usable as a denominator: it accumulates every
@@ -252,12 +264,11 @@ function processEntries(
  * per id wins. A request's span runs from the `user` entry (prompt or tool_result)
  * that triggered it to its latest record — the response's own first-to-last record
  * gap covers only the tail of the stream and would overstate the rate.
+ *
+ * burnRate's consumption counts input + cache write + output per request. Cache reads
+ * are excluded: they are billed at a fraction of input and re-read the whole prefix on
+ * every call, so including them made the figure track context size, not spend.
  */
-/** A request counts toward session totals only once it has both output and a span. */
-function isMeasured(outputTokens: number, durationMs?: number): boolean {
-  return outputTokens > 0 && durationMs !== undefined && durationMs > 0;
-}
-
 function accountTokens(existing: ParsedTranscript, entry: TranscriptEntry): void {
   // Subagent records interleave with the main thread and would both move the
   // boundary and switch the tracked request id.
@@ -273,7 +284,12 @@ function accountTokens(existing: ParsedTranscript, entry: TranscriptEntry): void
     return;
   }
 
-  const msg = entry.message as { id?: string; usage?: { output_tokens?: number } } | undefined;
+  const msg = entry.message as
+    | {
+        id?: string;
+        usage?: { input_tokens?: number; cache_creation_input_tokens?: number; output_tokens?: number };
+      }
+    | undefined;
   const msgId = msg?.id;
   if (!msgId) return;
 
@@ -283,6 +299,7 @@ function accountTokens(existing: ParsedTranscript, entry: TranscriptEntry): void
   if (msgId !== existing.lastRequestId) {
     existing.lastRequestId = msgId;
     existing.lastRequestOutput = 0;
+    existing.lastRequestInput = 0;
     existing.lastRequestDurationMs = undefined;
     // Pin the start now: with streaming tool execution a tool_result can be written
     // before this response's later records, and must not restart its span.
@@ -290,10 +307,18 @@ function accountTokens(existing: ParsedTranscript, entry: TranscriptEntry): void
   }
 
   const prevOut = existing.lastRequestOutput;
+  const prevIn = existing.lastRequestInput;
   const prevMs = existing.lastRequestDurationMs;
 
-  const out = msg?.usage?.output_tokens;
-  if (typeof out === 'number' && out > prevOut) existing.lastRequestOutput = out;
+  // The usage block repeats on every record of a response; the newest max wins.
+  const usage = msg?.usage;
+  existing.lastRequestOutput = Math.max(prevOut, tokenCount(usage?.output_tokens));
+  existing.lastRequestInput = Math.max(
+    prevIn,
+    tokenCount(usage?.input_tokens) + tokenCount(usage?.cache_creation_input_tokens)
+  );
+  existing.sessionConsumedTokens +=
+    existing.lastRequestInput - prevIn + existing.lastRequestOutput - prevOut;
 
   const start = existing.lastRequestStartAt;
   if (Number.isFinite(t) && start !== undefined && t > start) {

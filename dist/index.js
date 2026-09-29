@@ -1898,7 +1898,9 @@ function createParsedTranscript() {
     activeSlashCommand: null,
     sessionOutputTokens: 0,
     sessionRequestMs: 0,
-    lastRequestOutput: 0
+    sessionConsumedTokens: 0,
+    lastRequestOutput: 0,
+    lastRequestInput: 0
   };
 }
 var SLASH_COMMAND_TAG_RE = /<command-name>([^<]+)<\/command-name>/;
@@ -2038,6 +2040,9 @@ function processEntries(entries, existing) {
 function isMeasured(outputTokens, durationMs) {
   return outputTokens > 0 && durationMs !== void 0 && durationMs > 0;
 }
+function tokenCount(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
 function accountTokens(existing, entry) {
   if (entry.isSidechain)
     return;
@@ -2056,14 +2061,20 @@ function accountTokens(existing, entry) {
   if (msgId !== existing.lastRequestId) {
     existing.lastRequestId = msgId;
     existing.lastRequestOutput = 0;
+    existing.lastRequestInput = 0;
     existing.lastRequestDurationMs = void 0;
     existing.lastRequestStartAt = existing.lastBoundaryAt;
   }
   const prevOut = existing.lastRequestOutput;
+  const prevIn = existing.lastRequestInput;
   const prevMs = existing.lastRequestDurationMs;
-  const out = msg?.usage?.output_tokens;
-  if (typeof out === "number" && out > prevOut)
-    existing.lastRequestOutput = out;
+  const usage = msg?.usage;
+  existing.lastRequestOutput = Math.max(prevOut, tokenCount(usage?.output_tokens));
+  existing.lastRequestInput = Math.max(
+    prevIn,
+    tokenCount(usage?.input_tokens) + tokenCount(usage?.cache_creation_input_tokens)
+  );
+  existing.sessionConsumedTokens += existing.lastRequestInput - prevIn + existing.lastRequestOutput - prevOut;
   const start = existing.lastRequestStartAt;
   if (Number.isFinite(t) && start !== void 0 && t > start) {
     existing.lastRequestDurationMs = t - start;
@@ -2337,28 +2348,16 @@ var burnRateWidget = {
   id: "burnRate",
   name: "Burn Rate",
   async getData(ctx) {
-    const usage = ctx.stdin.context_window?.current_usage;
-    let elapsedMinutes;
-    try {
-      elapsedMinutes = await getSessionElapsedMinutes(ctx, 0);
-    } catch (error) {
-      debugLog("burnRate", "Failed to get session elapsed time", error);
+    const transcript = await getTranscript(ctx);
+    if (!transcript)
       return null;
-    }
-    if (elapsedMinutes === null)
-      return null;
-    if (!usage || elapsedMinutes === 0) {
+    const { sessionConsumedTokens, sessionStartTime } = transcript;
+    const elapsedMinutes = sessionStartTime ? (Date.now() - sessionStartTime) / 6e4 : 0;
+    if (elapsedMinutes <= 0 || sessionConsumedTokens === 0) {
       return { tokensPerMinute: 0 };
     }
-    const totalTokens = usage.input_tokens + usage.output_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
-    if (totalTokens === 0) {
-      return { tokensPerMinute: 0 };
-    }
-    const tokensPerMinute = totalTokens / elapsedMinutes;
-    if (!Number.isFinite(tokensPerMinute) || tokensPerMinute < 0) {
-      return null;
-    }
-    return { tokensPerMinute };
+    const tokensPerMinute = sessionConsumedTokens / elapsedMinutes;
+    return Number.isFinite(tokensPerMinute) ? { tokensPerMinute } : null;
   },
   render(data, _ctx) {
     return `${ICON.fire} ${formatTokens(Math.round(data.tokensPerMinute))}/min`;

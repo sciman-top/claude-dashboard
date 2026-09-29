@@ -144,7 +144,9 @@ function createTranscript(overrides: Partial<ParsedTranscript> = {}): ParsedTran
     activeSlashCommand: null,
     sessionOutputTokens: 0,
     sessionRequestMs: 0,
+    sessionConsumedTokens: 0,
     lastRequestOutput: 0,
+    lastRequestInput: 0,
     ...overrides,
   };
 }
@@ -635,7 +637,7 @@ describe('widgets', () => {
 
     it('should not set subPath when current_dir is a sibling with same prefix', async () => {
       const ctx = createContext({
-        workspace: { current_dir: '/home/user/proj-backup/src', project_dir: '/home/user/proj' },
+        workspace: { current_dir: '/tmp/proj-backup/src', project_dir: '/tmp/proj' },
       });
       const data = await projectInfoWidget.getData(ctx);
 
@@ -919,17 +921,61 @@ describe('widgets', () => {
       expect(burnRateWidget.name).toBe('Burn Rate');
     });
 
-    it('should return 0 when usage is missing', async () => {
+    const NOW = Date.parse('2026-01-01T01:00:00.000Z');
+    const minutesAgo = (m: number) => NOW - m * 60_000;
+
+    // stdin's current_usage is the last request only (and includes cache reads), so
+    // dividing it by session minutes gave "context size over time", not a burn rate.
+    it('should divide the session total by elapsed minutes, ignoring current_usage', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(NOW);
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(
+        createTranscript({ sessionConsumedTokens: 50000, sessionStartTime: minutesAgo(10) })
+      );
       const ctx = createContext({
         context_window: {
           total_input_tokens: 0,
           total_output_tokens: 0,
           context_window_size: 200000,
-          current_usage: null,
+          current_usage: {
+            input_tokens: 5,
+            output_tokens: 200,
+            cache_creation_input_tokens: 300,
+            cache_read_input_tokens: 90000,
+          },
         },
       });
-      const data = await burnRateWidget.getData(ctx);
-      expect(data).toEqual({ tokensPerMinute: 0 });
+      expect(await burnRateWidget.getData(ctx)).toEqual({ tokensPerMinute: 5000 });
+    });
+
+    // The token total spans the whole transcript, so the clock must too — not the
+    // session.ts clock, which starts whenever a session widget first rendered.
+    it('should measure time from the transcript start, not the widget clock', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(NOW);
+      vi.spyOn(sessionUtils, 'getSessionElapsedMinutes').mockResolvedValue(0.1);
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(
+        createTranscript({ sessionConsumedTokens: 60000, sessionStartTime: minutesAgo(60) })
+      );
+      expect(await burnRateWidget.getData(createContext())).toEqual({ tokensPerMinute: 1000 });
+    });
+
+    it('should return 0 before the transcript has a start time', async () => {
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(
+        createTranscript({ sessionConsumedTokens: 50000 })
+      );
+      expect(await burnRateWidget.getData(createContext())).toEqual({ tokensPerMinute: 0 });
+    });
+
+    it('should return 0 before any tokens are consumed', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(NOW);
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(
+        createTranscript({ sessionStartTime: minutesAgo(10) })
+      );
+      expect(await burnRateWidget.getData(createContext())).toEqual({ tokensPerMinute: 0 });
+    });
+
+    it('should return null when the transcript is unavailable', async () => {
+      vi.spyOn(transcriptParser, 'getTranscript').mockResolvedValue(null);
+      expect(await burnRateWidget.getData(createContext())).toBeNull();
     });
 
     it('should render burn rate with tokens per minute', () => {

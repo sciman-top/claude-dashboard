@@ -1020,7 +1020,7 @@ export interface ParsedTranscript {
   /** Slash command name + start time, cleared when a plain user message arrives */
   activeSlashCommand: SlashCommandData | null;
 
-  // --- Token accounting (tokenSpeed / tokenSpeedLast widgets) ---
+  // --- Token accounting (tokenSpeed / tokenSpeedLast / burnRate widgets) ---
   //
   // Derived from the transcript rather than stdin: Claude Code 2.1.132 changed
   // context_window's token counts from session totals to current-context values,
@@ -1031,8 +1031,12 @@ export interface ParsedTranscript {
   sessionOutputTokens: number;
   /** Summed wall-clock spans of the same requests, in ms */
   sessionRequestMs: number;
+  /** input + cache write + output of every main-conversation request (burnRate) */
+  sessionConsumedTokens: number;
   /** Output tokens of the newest API response */
   lastRequestOutput: number;
+  /** input + cache write tokens of the newest API response */
+  lastRequestInput: number;
   /** Wall-clock span of the newest API response in ms; undefined until measurable */
   lastRequestDurationMs?: number;
   /** Id of the newest API response, tracked while its records stream in */

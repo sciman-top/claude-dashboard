@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-claude-dashboard provides 40 widgets organized by category. Each widget can be individually enabled, disabled, or rearranged in your layout.
+claude-dashboard provides 49 widgets organized by category. Each widget can be individually enabled, disabled, or rearranged in your layout.
 
 ## Core
 
@@ -51,7 +51,7 @@ claude-dashboard provides 40 widgets organized by category. Each widget can be i
 
 | Widget | Description |
 |--------|-------------|
-| `burnRate` | Token consumption per minute |
+| `burnRate` | Token consumption per minute, session average (input + cache write + output) |
 | `tokenSpeed` | Output token generation speed, session average (e.g., `67 tok/s`) |
 | `tokenSpeedLast` | Output token generation speed of the most recent response (e.g., `last 150 tok/s`) |
 | `cacheHit` | Cache hit rate percentage (last request) |
