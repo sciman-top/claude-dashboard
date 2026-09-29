@@ -39,7 +39,7 @@ Configure the claude-dashboard status line plugin with widget system support.
 
 | Widget | Description |
 |--------|-------------|
-| `model` | Model name with emoji, effort level (Opus/Sonnet/Fable), fast mode (Opus) |
+| `model` | Model name and version with emoji (e.g. `Opus 5.5`), effort level (Opus/Sonnet/Fable), fast mode (Opus) |
 | `context` | Progress bar, percentage, tokens |
 | `contextBar` | Progress bar only (sub-widget of `context`) |
 | `contextPercentage` | Percentage only (sub-widget of `context`) |
@@ -100,16 +100,16 @@ Use AskUserQuestion to ask the user. Batch independent questions into a single A
 1. Display mode — MUST include `markdown` field on each option for visual preview:
    - compact (recommended), markdown:
      ```
-     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      ```
    - normal, markdown:
      ```
-     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      📁 project (main ↑3) │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ✓ 3/5
      ```
    - detailed, markdown:
      ```
-     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      📁 project (main ↑3) │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ⏳ 2h │ ✓ 3/5
      CLAUDE.md: 2 │ ⚙️ 12 done │ 🤖 Agent: 1 │ 📦 85% │ 🟢 72%
      📊 In 30K · Out 8K │ 📈 ~$8/h │ 💵 $5/$15 │ 🔷 codex │ 💎 gemini │ 🪐 antigravity

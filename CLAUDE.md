@@ -141,7 +141,7 @@ interface Widget<T extends WidgetData> {
 
 | Widget ID | Data Source | Description |
 |-----------|-------------|-------------|
-| `model` | stdin + settings | Model name with emoji, effort level for Opus/Sonnet/Fable (MAX/X/H/M/L), fast mode for Opus (↯). Live `stdin.effort.level` / `stdin.fast_mode` win; `settings.json` (`modelSettings[<id>].effortLevel`, `effortLevel`, `fastMode`) is the fallback for older Claude Code |
+| `model` | stdin + settings | Model name and version with emoji (e.g. `Opus 5.5`, parsed from `display_name`), effort level for Opus/Sonnet/Fable (MAX/X/H/M/L), fast mode for Opus (↯). Live `stdin.effort.level` / `stdin.fast_mode` win; `settings.json` (`modelSettings[<id>].effortLevel`, `effortLevel`, `fastMode`) is the fallback for older Claude Code |
 | `context` | stdin | Progress bar, %, tokens |
 | `contextBar` | stdin | Progress bar only (sub-widget of `context`) |
 | `contextPercentage` | stdin | Percentage only (sub-widget of `context`) |
