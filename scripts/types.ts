@@ -30,6 +30,11 @@ export interface StdinInput {
     original_branch?: string;
   };
   context_window: {
+    /**
+     * Since Claude Code 2.1.132 these two are current-context values from the most
+     * recent API response, not session totals. Session totals must come from the
+     * transcript (see ParsedTranscript token accounting).
+     */
     total_input_tokens: number;
     total_output_tokens: number;
     context_window_size: number;
@@ -48,7 +53,11 @@ export interface StdinInput {
     total_cost_usd: number;
     /** Total session duration in milliseconds from Claude Code stdin */
     total_duration_ms?: number;
-    /** Total time spent in API calls in ms (excludes user/tool time) */
+    /**
+     * Total time spent in API calls in ms (excludes user/tool time). Process-wide:
+     * includes subagent, compaction and side-query calls, so it does not pair with
+     * main-transcript token counts.
+     */
     total_api_duration_ms?: number;
     /** Total lines added in the session */
     total_lines_added?: number;
@@ -180,6 +189,7 @@ export type WidgetId =
   | 'linesChanged'
   | 'outputStyle'
   | 'tokenSpeed'
+  | 'tokenSpeedLast'
   | 'sessionName'
   | 'todayCost'
   | 'lastPrompt'
@@ -306,6 +316,7 @@ export const PRESET_CHAR_MAP: Record<string, WidgetId> = {
   L: 'linesChanged',
   Y: 'outputStyle',
   Q: 'tokenSpeed',
+  q: 'tokenSpeedLast',
   J: 'sessionName',
   '@': 'todayCost',
   '?': 'lastPrompt',
@@ -386,6 +397,7 @@ export interface Translations {
     hooks: string;
     burnRate: string;
     cache: string;
+    tokenSpeedLast: string;
     cacheMiss: string;
     toLimit: string;
     forecast: string;
@@ -822,7 +834,7 @@ export interface OutputStyleData {
  * @invariant tokensPerSecond >= 0 (enforced in widget)
  */
 export interface TokenSpeedData {
-  /** Output tokens per second of API time. Always >= 0. */
+  /** Output tokens per second of request wall-clock time. Always >= 0. */
   tokensPerSecond: number;
 }
 
@@ -952,6 +964,8 @@ export type WidgetData =
 export interface TranscriptEntry {
   type: 'assistant' | 'user' | 'tool_result' | 'system';
   timestamp?: string;
+  /** True for subagent records written into the main transcript (older Claude Code) */
+  isSidechain?: boolean;
   /** Session name set by /rename command */
   customTitle?: string;
   message?: {
@@ -1005,6 +1019,28 @@ export interface ParsedTranscript {
   pendingTaskUpdates: Map<string, { taskId: string; status?: string; subject?: string }>;
   /** Slash command name + start time, cleared when a plain user message arrives */
   activeSlashCommand: SlashCommandData | null;
+
+  // --- Token accounting (tokenSpeed / tokenSpeedLast widgets) ---
+  //
+  // Derived from the transcript rather than stdin: Claude Code 2.1.132 changed
+  // context_window's token counts from session totals to current-context values,
+  // and cost.total_api_duration_ms also counts subagent and side-query calls whose
+  // output never reaches this transcript.
+
+  /** Output tokens of every main-conversation request with a measured span */
+  sessionOutputTokens: number;
+  /** Summed wall-clock spans of the same requests, in ms */
+  sessionRequestMs: number;
+  /** Output tokens of the newest API response */
+  lastRequestOutput: number;
+  /** Wall-clock span of the newest API response in ms; undefined until measurable */
+  lastRequestDurationMs?: number;
+  /** Id of the newest API response, tracked while its records stream in */
+  lastRequestId?: string;
+  /** Start of the newest response — the boundary pinned when its id first appeared */
+  lastRequestStartAt?: number;
+  /** Timestamp of the newest `user` entry (prompt or tool_result) */
+  lastBoundaryAt?: number;
 }
 
 /**

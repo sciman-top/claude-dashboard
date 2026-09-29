@@ -60,6 +60,7 @@ var PRESET_CHAR_MAP = {
   L: "linesChanged",
   Y: "outputStyle",
   Q: "tokenSpeed",
+  q: "tokenSpeedLast",
   J: "sessionName",
   "@": "todayCost",
   "?": "lastPrompt",
@@ -941,6 +942,7 @@ var en_default = {
     hooks: "Hooks",
     burnRate: "Rate",
     cache: "Cache",
+    tokenSpeedLast: "last",
     cacheMiss: "miss",
     toLimit: "to",
     forecast: "Forecast",
@@ -1002,6 +1004,7 @@ var ko_default = {
     hooks: "\uD6C5",
     burnRate: "\uC18C\uBAA8\uC728",
     cache: "\uCE90\uC2DC",
+    tokenSpeedLast: "\uCD5C\uADFC",
     cacheMiss: "miss",
     toLimit: "\uD6C4",
     forecast: "\uC608\uCE21",
@@ -1892,7 +1895,10 @@ function createParsedTranscript() {
     nextTaskId: 1,
     pendingTaskCreates: /* @__PURE__ */ new Map(),
     pendingTaskUpdates: /* @__PURE__ */ new Map(),
-    activeSlashCommand: null
+    activeSlashCommand: null,
+    sessionOutputTokens: 0,
+    sessionRequestMs: 0,
+    lastRequestOutput: 0
   };
 }
 var SLASH_COMMAND_TAG_RE = /<command-name>([^<]+)<\/command-name>/;
@@ -2026,6 +2032,49 @@ function processEntries(entries, existing) {
         }
       }
     }
+    accountTokens(existing, entry);
+  }
+}
+function isMeasured(outputTokens, durationMs) {
+  return outputTokens > 0 && durationMs !== void 0 && durationMs > 0;
+}
+function accountTokens(existing, entry) {
+  if (entry.isSidechain)
+    return;
+  if (entry.type !== "user" && entry.type !== "assistant")
+    return;
+  const t = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
+  if (entry.type === "user") {
+    if (Number.isFinite(t))
+      existing.lastBoundaryAt = t;
+    return;
+  }
+  const msg = entry.message;
+  const msgId = msg?.id;
+  if (!msgId)
+    return;
+  if (msgId !== existing.lastRequestId) {
+    existing.lastRequestId = msgId;
+    existing.lastRequestOutput = 0;
+    existing.lastRequestDurationMs = void 0;
+    existing.lastRequestStartAt = existing.lastBoundaryAt;
+  }
+  const prevOut = existing.lastRequestOutput;
+  const prevMs = existing.lastRequestDurationMs;
+  const out = msg?.usage?.output_tokens;
+  if (typeof out === "number" && out > prevOut)
+    existing.lastRequestOutput = out;
+  const start = existing.lastRequestStartAt;
+  if (Number.isFinite(t) && start !== void 0 && t > start) {
+    existing.lastRequestDurationMs = t - start;
+  }
+  if (isMeasured(prevOut, prevMs)) {
+    existing.sessionOutputTokens -= prevOut;
+    existing.sessionRequestMs -= prevMs;
+  }
+  if (isMeasured(existing.lastRequestOutput, existing.lastRequestDurationMs)) {
+    existing.sessionOutputTokens += existing.lastRequestOutput;
+    existing.sessionRequestMs += existing.lastRequestDurationMs;
   }
 }
 async function readFromOffset(filePath, offset, fileSize) {
@@ -4308,21 +4357,42 @@ var outputStyleWidget = {
 };
 
 // scripts/widgets/token-speed.ts
+function toRate(outputTokens, durationMs) {
+  if (outputTokens <= 0 || !durationMs || durationMs <= 0)
+    return null;
+  const tokensPerSecond = outputTokens / (durationMs / 1e3);
+  return Number.isFinite(tokensPerSecond) && tokensPerSecond > 0 ? { tokensPerSecond } : null;
+}
+function formatRate(data) {
+  return `${Math.round(data.tokensPerSecond)} tok/s`;
+}
 var tokenSpeedWidget = {
   id: "tokenSpeed",
   name: "Token Speed",
   async getData(ctx) {
-    const outputTokens = ctx.stdin.context_window?.total_output_tokens;
-    const apiDurationMs = ctx.stdin.cost?.total_api_duration_ms;
-    if (!outputTokens || !apiDurationMs || apiDurationMs <= 0)
+    const transcript = await getTranscript(ctx);
+    if (!transcript)
       return null;
-    const tokensPerSecond = outputTokens / (apiDurationMs / 1e3);
-    if (!Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0)
-      return null;
-    return { tokensPerSecond };
+    return toRate(transcript.sessionOutputTokens, transcript.sessionRequestMs);
   },
   render(data, _ctx) {
-    return colorize(`${ICON.zap} ${Math.round(data.tokensPerSecond)} tok/s`, getTheme().accent);
+    return colorize(`${ICON.zap} ${formatRate(data)}`, getTheme().accent);
+  }
+};
+var tokenSpeedLastWidget = {
+  id: "tokenSpeedLast",
+  name: "Token Speed (Last Response)",
+  async getData(ctx) {
+    const transcript = await getTranscript(ctx);
+    if (!transcript)
+      return null;
+    return toRate(transcript.lastRequestOutput, transcript.lastRequestDurationMs);
+  },
+  render(data, ctx) {
+    return colorize(
+      `${ICON.zap} ${ctx.translations.widgets.tokenSpeedLast} ${formatRate(data)}`,
+      getTheme().accent
+    );
   }
 };
 
@@ -4681,6 +4751,7 @@ var widgetRegistry = /* @__PURE__ */ new Map([
   ["linesChanged", linesChangedWidget],
   ["outputStyle", outputStyleWidget],
   ["tokenSpeed", tokenSpeedWidget],
+  ["tokenSpeedLast", tokenSpeedLastWidget],
   ["sessionName", sessionNameWidget],
   ["todayCost", todayCostWidget],
   ["lastPrompt", lastPromptWidget],

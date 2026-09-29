@@ -46,6 +46,9 @@ function createParsedTranscript(): ParsedTranscript {
     pendingTaskCreates: new Map(),
     pendingTaskUpdates: new Map(),
     activeSlashCommand: null,
+    sessionOutputTokens: 0,
+    sessionRequestMs: 0,
+    lastRequestOutput: 0,
   };
 }
 
@@ -231,6 +234,81 @@ function processEntries(
         }
       }
     }
+
+    accountTokens(existing, entry);
+  }
+}
+
+/**
+ * Token accounting for the tokenSpeed / tokenSpeedLast widgets.
+ *
+ * Both halves of each rate come from the main transcript. stdin's
+ * cost.total_api_duration_ms is not usable as a denominator: it accumulates every
+ * API call in the process (subagents, compaction, side queries), while subagent
+ * output lives in separate transcripts.
+ *
+ * A response arrives as several records sharing one message id; the usage block
+ * repeats on each, mostly 0 with the real count on the last, so the newest value
+ * per id wins. A request's span runs from the `user` entry (prompt or tool_result)
+ * that triggered it to its latest record — the response's own first-to-last record
+ * gap covers only the tail of the stream and would overstate the rate.
+ */
+/** A request counts toward session totals only once it has both output and a span. */
+function isMeasured(outputTokens: number, durationMs?: number): boolean {
+  return outputTokens > 0 && durationMs !== undefined && durationMs > 0;
+}
+
+function accountTokens(existing: ParsedTranscript, entry: TranscriptEntry): void {
+  // Subagent records interleave with the main thread and would both move the
+  // boundary and switch the tracked request id.
+  if (entry.isSidechain) return;
+  if (entry.type !== 'user' && entry.type !== 'assistant') return;
+
+  const t = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
+
+  if (entry.type === 'user') {
+    // Only user entries start a request. system/attachment/progress entries can land
+    // between the trigger and the response and would shorten the span.
+    if (Number.isFinite(t)) existing.lastBoundaryAt = t;
+    return;
+  }
+
+  const msg = entry.message as { id?: string; usage?: { output_tokens?: number } } | undefined;
+  const msgId = msg?.id;
+  if (!msgId) return;
+
+  // O(1) state: main-thread records of one response are contiguous, so tracking the
+  // newest id is enough to dedupe. This state survives incremental reads, so a
+  // response split across two reads is still counted once.
+  if (msgId !== existing.lastRequestId) {
+    existing.lastRequestId = msgId;
+    existing.lastRequestOutput = 0;
+    existing.lastRequestDurationMs = undefined;
+    // Pin the start now: with streaming tool execution a tool_result can be written
+    // before this response's later records, and must not restart its span.
+    existing.lastRequestStartAt = existing.lastBoundaryAt;
+  }
+
+  const prevOut = existing.lastRequestOutput;
+  const prevMs = existing.lastRequestDurationMs;
+
+  const out = msg?.usage?.output_tokens;
+  if (typeof out === 'number' && out > prevOut) existing.lastRequestOutput = out;
+
+  const start = existing.lastRequestStartAt;
+  if (Number.isFinite(t) && start !== undefined && t > start) {
+    existing.lastRequestDurationMs = t - start;
+  }
+
+  // Session totals hold only requests with both a count and a span, so the two
+  // halves of the ratio always cover the same requests. Apply this request's delta.
+  if (isMeasured(prevOut, prevMs)) {
+    existing.sessionOutputTokens -= prevOut;
+    existing.sessionRequestMs -= prevMs!;
+  }
+  if (isMeasured(existing.lastRequestOutput, existing.lastRequestDurationMs)) {
+    existing.sessionOutputTokens += existing.lastRequestOutput;
+    existing.sessionRequestMs += existing.lastRequestDurationMs!;
   }
 }
 
