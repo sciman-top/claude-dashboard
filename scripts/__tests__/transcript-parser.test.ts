@@ -3,7 +3,7 @@
  * @covers scripts/utils/transcript-parser.ts
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, writeFile, appendFile, rm } from 'fs/promises';
+import { mkdir, writeFile, appendFile, readFile, readdir, rm } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 
@@ -14,9 +14,12 @@ describe('transcript-parser', () => {
   beforeEach(async () => {
     vi.resetModules();
     await mkdir(TEST_DIR, { recursive: true });
+    // Keep the persisted parse state (FILE_CACHE_DIR) inside the test dir, not ~/.cache.
+    vi.spyOn(os, 'homedir').mockReturnValue(TEST_DIR);
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     try {
       await rm(TEST_DIR, { recursive: true, force: true });
     } catch {
@@ -1368,6 +1371,86 @@ describe('transcript-parser', () => {
 
       expect(transcript!.sessionOutputTokens).toBe(1000);
       expect(transcript!.sessionRequestMs).toBe(5000);
+    });
+  });
+  describe('persisted parse state', () => {
+    const entry = (id: string, out: number, t: string) =>
+      JSON.stringify({ type: 'assistant', timestamp: t, message: { id, usage: { output_tokens: out } } });
+    const user = (t: string) => JSON.stringify({ type: 'user', timestamp: t, message: { content: 'hi' } });
+
+    // Each status line render is a new process; a fresh module simulates that.
+    async function freshParse() {
+      vi.resetModules();
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      return parseTranscript(TEST_FILE);
+    }
+
+    // Proves the second process resumed rather than re-parsing: the persisted total is
+    // tampered with, and only a resumed parse carries the tampered value forward.
+    it('resumes from persisted state in a new process', async () => {
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + entry('msg_a', 100, '2024-01-01T00:00:02.000Z') + '\n');
+      await freshParse();
+
+      const [stateFile] = (await readdir(path.join(TEST_DIR, '.cache', 'claude-dashboard'))).filter((f) =>
+        f.startsWith('transcript-')
+      );
+      const statePath = path.join(TEST_DIR, '.cache', 'claude-dashboard', stateFile);
+      const persisted = JSON.parse(await readFile(statePath, 'utf-8'));
+      persisted.data.state.data.sessionOutputTokens = 10000;
+      await writeFile(statePath, JSON.stringify(persisted));
+
+      await appendFile(TEST_FILE, user('2024-01-01T00:00:10.000Z') + '\n' + entry('msg_b', 300, '2024-01-01T00:00:13.000Z') + '\n');
+      const transcript = await freshParse();
+
+      expect(transcript!.sessionOutputTokens).toBe(10300);
+    });
+
+    it('round-trips Maps and Sets', async () => {
+      await writeFile(
+        TEST_FILE,
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          message: { id: 'msg_a', content: [{ type: 'tool_use', id: 'tool_1', name: 'Read', input: { file_path: '/a/b.ts' } }] },
+        }) + '\n'
+      );
+      await freshParse();
+      await appendFile(TEST_FILE, user('2024-01-01T00:00:05.000Z') + '\n');
+      const transcript = await freshParse();
+
+      expect(transcript!.runningToolIds).toBeInstanceOf(Set);
+      expect(transcript!.runningToolIds.has('tool_1')).toBe(true);
+      expect(transcript!.toolUses).toBeInstanceOf(Map);
+      expect(transcript!.toolUses.get('tool_1')?.name).toBe('Read');
+    });
+
+    it('leaves a half-written trailing line for the next read', async () => {
+      const full = entry('msg_a', 700, '2024-01-01T00:00:03.000Z');
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + full.slice(0, 40));
+      expect((await freshParse())!.lastRequestOutput).toBe(0);
+
+      await appendFile(TEST_FILE, full.slice(40) + '\n');
+      expect((await freshParse())!.lastRequestOutput).toBe(700);
+    });
+
+    it('rebuilds when the path now holds a different file', async () => {
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + entry('msg_a', 100, '2024-01-01T00:00:02.000Z') + '\n');
+      await freshParse();
+
+      // Same path, different (longer) content: resuming at the old offset would be wrong.
+      await writeFile(TEST_FILE, user('2025-06-01T00:00:00.000Z') + '\n' + entry('msg_z', 900, '2025-06-01T00:00:04.000Z') + '\n' + user('2025-06-01T00:00:09.000Z') + '\n');
+      const transcript = await freshParse();
+
+      expect(transcript!.sessionOutputTokens).toBe(900);
+      expect(transcript!.lastRequestId).toBe('msg_z');
+    });
+
+    it('rebuilds when the file was truncated', async () => {
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + entry('msg_a', 100, '2024-01-01T00:00:02.000Z') + '\n');
+      await freshParse();
+
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n');
+      expect((await freshParse())!.sessionOutputTokens).toBe(0);
     });
   });
 });

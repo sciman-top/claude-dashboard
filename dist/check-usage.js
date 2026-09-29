@@ -125,7 +125,8 @@ var CLEANABLE_PREFIXES = [
   "gemini-usage-",
   "antigravity-usage-",
   "antigravity-token-",
-  "zai-usage-"
+  "zai-usage-",
+  "transcript-"
 ];
 var lastCleanupTime = 0;
 function fileCachePath(name) {
