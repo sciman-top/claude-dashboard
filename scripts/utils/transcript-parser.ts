@@ -4,11 +4,13 @@
  * @tested scripts/__tests__/transcript-parser.test.ts
  * @tested scripts/__tests__/widgets.test.ts
  * Uses incremental parsing: remembers last byte offset and only parses new content.
+ * The status line is a fresh process per render, so the parse state is also persisted
+ * to the file cache; otherwise every render would re-parse the whole transcript.
  * Running tools, agents, tasks, and todos are tracked incrementally in processEntries()
  * so extract functions read O(1) instead of scanning the full transcript.
  */
 
-import { open, stat } from 'fs/promises';
+import { open, readFile, stat } from 'fs/promises';
 import { basename } from 'path';
 import type {
   TranscriptEntry,
@@ -19,16 +21,32 @@ import type {
   AgentStatusData,
 } from '../types.js';
 import { truncate } from './formatters.js';
+import { fileCachePath, saveFileCache } from './file-cache.js';
+import { hashToken } from './hash.js';
+import { VERSION } from '../version.js';
 
 /**
- * Cached transcript data with incremental parsing state
+ * Incremental parse state for one transcript file.
  */
-let cachedTranscript: {
+interface TranscriptState {
   path: string;
-  /** File size at last parse (used as byte offset for next read) */
+  /** Byte offset parsed so far — always just past a complete line */
   size: number;
+  /**
+   * Hash of the first min(size, HEAD_BYTES) bytes. Transcript files are append-only,
+   * so a changed head means the path now holds a different file and the state must
+   * be rebuilt. Hashed over the parsed range, not the current file, so growth alone
+   * never looks like a replacement.
+   */
+  head: string;
   data: ParsedTranscript;
-} | null = null;
+}
+
+/** In-process tier: reused while one process renders repeatedly (tests, check-usage). */
+let cachedTranscript: TranscriptState | null = null;
+
+/** Bytes hashed to fingerprint a transcript file (its first line carries the session id). */
+const HEAD_BYTES = 1024;
 
 /**
  * Create a fresh ParsedTranscript with all incremental tracking fields initialized.
@@ -103,7 +121,8 @@ function processEntries(
           existing.toolUses.set(block.id, {
             name: block.name,
             timestamp: entry.timestamp,
-            input: block.input,
+            target: extractToolTarget(block.name, block.input),
+            input: retainToolInput(block.name, block.input),
           });
           existing.runningToolIds.add(block.id);
 
@@ -338,61 +357,169 @@ function accountTokens(existing: ParsedTranscript, entry: TranscriptEntry): void
 }
 
 /**
- * Read bytes from file starting at offset
+ * Persisted-state compatibility key. Any change to the plugin version or to
+ * ParsedTranscript's initialized fields discards older state instead of resuming
+ * from a shape the current code does not expect.
  */
-async function readFromOffset(
-  filePath: string,
-  offset: number,
-  fileSize: number
-): Promise<string> {
-  const bytesToRead = fileSize - offset;
-  if (bytesToRead <= 0) return '';
+const STATE_SIGNATURE = `${VERSION}:${Object.keys(createParsedTranscript()).sort().join(',')}`;
+
+function stateCachePath(transcriptPath: string): string {
+  return fileCachePath(`transcript-${hashToken(transcriptPath)}.json`);
+}
+
+// ParsedTranscript holds Maps and Sets, which JSON drops; tag them so they round-trip.
+function stateReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Map) return { __map: [...value] };
+  if (value instanceof Set) return { __set: [...value] };
+  return value;
+}
+
+function stateReviver(_key: string, value: unknown): unknown {
+  if (value && typeof value === 'object') {
+    const tagged = value as { __map?: unknown; __set?: unknown };
+    if (Array.isArray(tagged.__map)) return new Map(tagged.__map as [unknown, unknown][]);
+    if (Array.isArray(tagged.__set)) return new Set(tagged.__set);
+  }
+  return value;
+}
+
+async function loadPersistedState(transcriptPath: string): Promise<TranscriptState | null> {
+  try {
+    const raw = await readFile(stateCachePath(transcriptPath), 'utf-8');
+    const entry = JSON.parse(raw, stateReviver) as {
+      data?: { signature?: string; state?: TranscriptState };
+    };
+    const persisted = entry.data;
+    if (persisted?.signature !== STATE_SIGNATURE || !persisted.state) return null;
+    // Guards the (practically impossible) hash collision between two transcript paths.
+    if (persisted.state.path !== transcriptPath) return null;
+    return persisted.state;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Written only when new lines were parsed, so the 1-hour cleanup sweep removes the
+ * state of a transcript idle for over an hour; the next render then re-parses once.
+ * Accepted: correct either way, and cheaper than touching the file on every render.
+ */
+async function persistState(state: TranscriptState): Promise<void> {
+  // saveFileCache stringifies without a replacer, so pre-serialize the Maps and Sets.
+  const payload = JSON.parse(JSON.stringify({ signature: STATE_SIGNATURE, state }, stateReplacer));
+  await saveFileCache(stateCachePath(state.path), payload);
+}
+
+/**
+ * Read bytes [offset, end) from a file
+ */
+async function readBytes(filePath: string, offset: number, end: number): Promise<Buffer> {
+  const length = end - offset;
+  if (length <= 0) return Buffer.alloc(0);
 
   const fd = await open(filePath, 'r');
   try {
-    const buffer = Buffer.alloc(bytesToRead);
-    await fd.read(buffer, 0, bytesToRead, offset);
-    return buffer.toString('utf-8');
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await fd.read(buffer, 0, length, offset);
+    return buffer.subarray(0, bytesRead);
   } finally {
     await fd.close();
   }
 }
 
 /**
+ * Read complete lines from `offset` to `fileSize`. A half-written trailing line is
+ * left for the next read instead of being consumed and lost; a trailing line that
+ * already parses as JSON is complete and is consumed (a cut-off object never parses).
+ */
+async function readCompleteLines(
+  filePath: string,
+  offset: number,
+  fileSize: number
+): Promise<{ content: string; nextOffset: number }> {
+  const buffer = await readBytes(filePath, offset, fileSize);
+  const end = buffer.lastIndexOf(0x0a) + 1;
+  const tail = buffer.subarray(end).toString('utf-8');
+  if (tail.trim() && isCompleteJson(tail)) {
+    return { content: buffer.toString('utf-8'), nextOffset: offset + buffer.length };
+  }
+  return { content: buffer.subarray(0, end).toString('utf-8'), nextOffset: offset + end };
+}
+
+function isCompleteJson(line: string): boolean {
+  try {
+    JSON.parse(line);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readHead(filePath: string, parsedSize: number): Promise<string> {
+  return hashToken((await readBytes(filePath, 0, Math.min(parsedSize, HEAD_BYTES))).toString('utf-8'));
+}
+
+/** Whether `state` still describes the file: not truncated, same leading bytes. */
+async function isResumable(state: TranscriptState, fileSize: number): Promise<boolean> {
+  if (state.size > fileSize) return false;
+  // Nothing parsed yet, or nothing new to read: skip the head read. A same-size
+  // replacement is not worth an extra read on every render.
+  if (state.size === 0 || state.size === fileSize) return true;
+  return state.head === (await readHead(state.path, state.size));
+}
+
+/**
  * Parse transcript JSONL file
- * Uses incremental parsing: only reads new bytes since last parse
+ * Uses incremental parsing: only reads new bytes since last parse. State comes from
+ * this process first, then from the persisted file cache, else a full parse.
  */
 export async function parseTranscript(
   transcriptPath: string
 ): Promise<ParsedTranscript | null> {
   try {
-    const fileStat = await stat(transcriptPath);
-    const fileSize = fileStat.size;
+    const fileSize = (await stat(transcriptPath)).size;
 
-    // Incremental parse: reuse existing data if file only grew
-    if (cachedTranscript?.path === transcriptPath && cachedTranscript.size <= fileSize) {
-      if (cachedTranscript.size === fileSize) {
-        return cachedTranscript.data;
+    let state: TranscriptState | null =
+      cachedTranscript?.path === transcriptPath ? cachedTranscript : await loadPersistedState(transcriptPath);
+    // Truncated or replaced file: rebuild from scratch.
+    if (state && !(await isResumable(state, fileSize))) state = null;
+    if (!state) state = { path: transcriptPath, size: 0, head: hashToken(''), data: createParsedTranscript() };
+
+    if (state.size < fileSize) {
+      const { content, nextOffset } = await readCompleteLines(transcriptPath, state.size, fileSize);
+      if (nextOffset > state.size) {
+        processEntries(parseJsonlContent(content), state.data);
+        // The fingerprint only widens until HEAD_BYTES; past that it is fixed.
+        if (state.size < HEAD_BYTES) state.head = await readHead(transcriptPath, nextOffset);
+        state.size = nextOffset;
+        await persistState(state);
       }
-
-      const newContent = await readFromOffset(transcriptPath, cachedTranscript.size, fileSize);
-      processEntries(parseJsonlContent(newContent), cachedTranscript.data);
-      cachedTranscript.size = fileSize;
-
-      return cachedTranscript.data;
     }
 
-    // Full parse (first time or different/truncated file)
-    const content = await readFromOffset(transcriptPath, 0, fileSize);
-    const data = createParsedTranscript();
-
-    processEntries(parseJsonlContent(content), data);
-
-    cachedTranscript = { path: transcriptPath, size: fileSize, data };
-
-    return data;
+    cachedTranscript = state;
+    return state.data;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The part of a tool's input that consumers read after the tool_use record: Agent/Task
+ * metadata for agentStatus, the todo list for todoProgress. Everything else is dropped,
+ * because toolUses is persisted with the parse state and a running (or never-answered)
+ * Write/Edit/Agent call would otherwise carry its whole body or prompt into every save.
+ */
+function retainToolInput(name: string, input: unknown): unknown {
+  if (!input || typeof input !== 'object') return undefined;
+  const inp = input as Record<string, unknown>;
+  switch (name) {
+    case 'Agent':
+    case 'Task':
+      return { description: inp.description, subagent_type: inp.subagent_type, model: inp.model };
+    case 'TodoWrite':
+      return { todos: inp.todos };
+    default:
+      return undefined;
   }
 }
 
@@ -436,7 +563,7 @@ export function getRunningTools(
       startTime: tool.timestamp
         ? new Date(tool.timestamp).getTime()
         : Date.now(),
-      target: extractToolTarget(tool.name, tool.input),
+      target: tool.target,
     });
   }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/statusline.ts
-import { readFile as readFile10, stat as stat11 } from "fs/promises";
+import { readFile as readFile11, stat as stat11 } from "fs/promises";
 import { join as join8 } from "path";
 import { homedir as homedir4 } from "os";
 
@@ -621,7 +621,8 @@ var CLEANABLE_PREFIXES = [
   "gemini-usage-",
   "antigravity-usage-",
   "antigravity-token-",
-  "zai-usage-"
+  "zai-usage-",
+  "transcript-"
 ];
 var lastCleanupTime = 0;
 function fileCachePath(name) {
@@ -1880,9 +1881,10 @@ var sessionDurationWidget = {
 };
 
 // scripts/utils/transcript-parser.ts
-import { open as open2, stat as stat6 } from "fs/promises";
+import { open as open2, readFile as readFile6, stat as stat6 } from "fs/promises";
 import { basename as basename2 } from "path";
 var cachedTranscript = null;
+var HEAD_BYTES = 1024;
 function createParsedTranscript() {
   return {
     toolUses: /* @__PURE__ */ new Map(),
@@ -1930,7 +1932,8 @@ function processEntries(entries, existing) {
           existing.toolUses.set(block.id, {
             name: block.name,
             timestamp: entry.timestamp,
-            input: block.input
+            target: extractToolTarget(block.name, block.input),
+            input: retainToolInput(block.name, block.input)
           });
           existing.runningToolIds.add(block.id);
           if (block.name === "Agent" || block.name === "Task") {
@@ -2088,39 +2091,121 @@ function accountTokens(existing, entry) {
     existing.sessionRequestMs += existing.lastRequestDurationMs;
   }
 }
-async function readFromOffset(filePath, offset, fileSize) {
-  const bytesToRead = fileSize - offset;
-  if (bytesToRead <= 0)
-    return "";
+var STATE_SIGNATURE = `${VERSION}:${Object.keys(createParsedTranscript()).sort().join(",")}`;
+function stateCachePath(transcriptPath) {
+  return fileCachePath(`transcript-${hashToken(transcriptPath)}.json`);
+}
+function stateReplacer(_key, value) {
+  if (value instanceof Map)
+    return { __map: [...value] };
+  if (value instanceof Set)
+    return { __set: [...value] };
+  return value;
+}
+function stateReviver(_key, value) {
+  if (value && typeof value === "object") {
+    const tagged = value;
+    if (Array.isArray(tagged.__map))
+      return new Map(tagged.__map);
+    if (Array.isArray(tagged.__set))
+      return new Set(tagged.__set);
+  }
+  return value;
+}
+async function loadPersistedState(transcriptPath) {
+  try {
+    const raw = await readFile6(stateCachePath(transcriptPath), "utf-8");
+    const entry = JSON.parse(raw, stateReviver);
+    const persisted = entry.data;
+    if (persisted?.signature !== STATE_SIGNATURE || !persisted.state)
+      return null;
+    if (persisted.state.path !== transcriptPath)
+      return null;
+    return persisted.state;
+  } catch {
+    return null;
+  }
+}
+async function persistState(state) {
+  const payload = JSON.parse(JSON.stringify({ signature: STATE_SIGNATURE, state }, stateReplacer));
+  await saveFileCache(stateCachePath(state.path), payload);
+}
+async function readBytes(filePath, offset, end) {
+  const length = end - offset;
+  if (length <= 0)
+    return Buffer.alloc(0);
   const fd = await open2(filePath, "r");
   try {
-    const buffer = Buffer.alloc(bytesToRead);
-    await fd.read(buffer, 0, bytesToRead, offset);
-    return buffer.toString("utf-8");
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await fd.read(buffer, 0, length, offset);
+    return buffer.subarray(0, bytesRead);
   } finally {
     await fd.close();
   }
 }
+async function readCompleteLines(filePath, offset, fileSize) {
+  const buffer = await readBytes(filePath, offset, fileSize);
+  const end = buffer.lastIndexOf(10) + 1;
+  const tail = buffer.subarray(end).toString("utf-8");
+  if (tail.trim() && isCompleteJson(tail)) {
+    return { content: buffer.toString("utf-8"), nextOffset: offset + buffer.length };
+  }
+  return { content: buffer.subarray(0, end).toString("utf-8"), nextOffset: offset + end };
+}
+function isCompleteJson(line) {
+  try {
+    JSON.parse(line);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function readHead(filePath, parsedSize) {
+  return hashToken((await readBytes(filePath, 0, Math.min(parsedSize, HEAD_BYTES))).toString("utf-8"));
+}
+async function isResumable(state, fileSize) {
+  if (state.size > fileSize)
+    return false;
+  if (state.size === 0 || state.size === fileSize)
+    return true;
+  return state.head === await readHead(state.path, state.size);
+}
 async function parseTranscript(transcriptPath) {
   try {
-    const fileStat = await stat6(transcriptPath);
-    const fileSize = fileStat.size;
-    if (cachedTranscript?.path === transcriptPath && cachedTranscript.size <= fileSize) {
-      if (cachedTranscript.size === fileSize) {
-        return cachedTranscript.data;
+    const fileSize = (await stat6(transcriptPath)).size;
+    let state = cachedTranscript?.path === transcriptPath ? cachedTranscript : await loadPersistedState(transcriptPath);
+    if (state && !await isResumable(state, fileSize))
+      state = null;
+    if (!state)
+      state = { path: transcriptPath, size: 0, head: hashToken(""), data: createParsedTranscript() };
+    if (state.size < fileSize) {
+      const { content, nextOffset } = await readCompleteLines(transcriptPath, state.size, fileSize);
+      if (nextOffset > state.size) {
+        processEntries(parseJsonlContent(content), state.data);
+        if (state.size < HEAD_BYTES)
+          state.head = await readHead(transcriptPath, nextOffset);
+        state.size = nextOffset;
+        await persistState(state);
       }
-      const newContent = await readFromOffset(transcriptPath, cachedTranscript.size, fileSize);
-      processEntries(parseJsonlContent(newContent), cachedTranscript.data);
-      cachedTranscript.size = fileSize;
-      return cachedTranscript.data;
     }
-    const content = await readFromOffset(transcriptPath, 0, fileSize);
-    const data = createParsedTranscript();
-    processEntries(parseJsonlContent(content), data);
-    cachedTranscript = { path: transcriptPath, size: fileSize, data };
-    return data;
+    cachedTranscript = state;
+    return state.data;
   } catch {
     return null;
+  }
+}
+function retainToolInput(name, input) {
+  if (!input || typeof input !== "object")
+    return void 0;
+  const inp = input;
+  switch (name) {
+    case "Agent":
+    case "Task":
+      return { description: inp.description, subagent_type: inp.subagent_type, model: inp.model };
+    case "TodoWrite":
+      return { todos: inp.todos };
+    default:
+      return void 0;
   }
 }
 function extractToolTarget(name, input) {
@@ -2150,7 +2235,7 @@ function getRunningTools(transcript) {
     running.push({
       name: tool.name,
       startTime: tool.timestamp ? new Date(tool.timestamp).getTime() : Date.now(),
-      target: extractToolTarget(tool.name, tool.input)
+      target: tool.target
     });
   }
   return running;
@@ -2486,7 +2571,7 @@ var promptCacheMissesWidget = {
 };
 
 // scripts/utils/codex-client.ts
-import { readFile as readFile6, stat as stat7, writeFile as writeFile2, mkdir as mkdir3 } from "fs/promises";
+import { readFile as readFile7, stat as stat7, writeFile as writeFile2, mkdir as mkdir3 } from "fs/promises";
 import { execFile as execFile4 } from "child_process";
 import os2 from "os";
 import path2 from "path";
@@ -2514,7 +2599,7 @@ async function getCodexAuth() {
     if (cachedAuth && cachedAuth.mtime === fileStat.mtimeMs) {
       return cachedAuth.data;
     }
-    const raw = await readFile6(CODEX_AUTH_PATH, "utf-8");
+    const raw = await readFile7(CODEX_AUTH_PATH, "utf-8");
     const json = JSON.parse(raw);
     const accessToken = json?.tokens?.access_token;
     const accountId = json?.tokens?.account_id;
@@ -2530,7 +2615,7 @@ async function getCodexAuth() {
 }
 async function getModelFromConfig() {
   try {
-    const raw = await readFile6(CODEX_CONFIG_PATH, "utf-8");
+    const raw = await readFile7(CODEX_CONFIG_PATH, "utf-8");
     const match = raw.match(/^model\s*=\s*["']([^"']+)["']\s*(?:#.*)?$/m);
     return match ? match[1] : null;
   } catch {
@@ -2547,7 +2632,7 @@ async function getConfigMtime() {
 }
 async function getCachedModel(currentMtime) {
   try {
-    const raw = await readFile6(MODEL_CACHE_PATH, "utf-8");
+    const raw = await readFile7(MODEL_CACHE_PATH, "utf-8");
     const cache = JSON.parse(raw);
     if (cache.configMtime === currentMtime && cache.model) {
       debugLog("codex", "getCachedModel: cache hit", cache.model);
@@ -2800,7 +2885,7 @@ var codexUsageWidget = {
 };
 
 // scripts/utils/gemini-client.ts
-import { readFile as readFile7, writeFile as writeFile3, stat as stat8 } from "fs/promises";
+import { readFile as readFile8, writeFile as writeFile3, stat as stat8 } from "fs/promises";
 import { execFile as execFile5 } from "child_process";
 import os3 from "os";
 import path3 from "path";
@@ -2888,7 +2973,7 @@ async function getCredentialsFromFile2() {
     if (cachedCredentials && cachedCredentials.mtime === fileStat.mtimeMs) {
       return cachedCredentials.data;
     }
-    const raw = await readFile7(oauthPath, "utf-8");
+    const raw = await readFile8(oauthPath, "utf-8");
     const json = JSON.parse(raw);
     const accessToken = json?.access_token;
     if (!accessToken) {
@@ -2979,7 +3064,7 @@ async function saveCredentialsToFile(credentials, rawResponse) {
     const oauthPath = path3.join(getGeminiDir(), OAUTH_CREDS_FILE);
     let existingData = {};
     try {
-      const raw = await readFile7(oauthPath, "utf-8");
+      const raw = await readFile8(oauthPath, "utf-8");
       existingData = JSON.parse(raw);
     } catch {
     }
@@ -3022,7 +3107,7 @@ async function getGeminiSettings() {
     if (cachedSettings && cachedSettings.mtime === fileStat.mtimeMs) {
       return cachedSettings.data;
     }
-    const raw = await readFile7(settingsPath, "utf-8");
+    const raw = await readFile8(settingsPath, "utf-8");
     const json = JSON.parse(raw);
     const data = {
       cloudaicompanionProject: json?.cloudaicompanionProject,
@@ -3315,7 +3400,7 @@ var geminiUsageAllWidget = {
 };
 
 // scripts/utils/antigravity-client.ts
-import { readFile as readFile8, stat as stat9 } from "fs/promises";
+import { readFile as readFile9, stat as stat9 } from "fs/promises";
 import os4 from "os";
 import path4 from "path";
 var API_TIMEOUT_MS4 = 5e3;
@@ -3367,7 +3452,7 @@ async function getCredentialsFromFile3() {
     if (cachedCredentials2 && cachedCredentials2.mtime === fileStat.mtimeMs) {
       return cachedCredentials2.data;
     }
-    const raw = await readFile8(tokenPath, "utf-8");
+    const raw = await readFile9(tokenPath, "utf-8");
     const json = JSON.parse(raw);
     const accessToken = json?.token?.access_token;
     if (!accessToken) {
@@ -3508,7 +3593,7 @@ async function getAntigravitySettings() {
     if (cachedSettings2 && cachedSettings2.mtime === fileStat.mtimeMs) {
       return cachedSettings2.data;
     }
-    const raw = await readFile8(settingsPath, "utf-8");
+    const raw = await readFile9(settingsPath, "utf-8");
     const json = JSON.parse(raw);
     const data = {
       model: typeof json?.model === "string" ? json.model : void 0
@@ -4178,7 +4263,7 @@ var forecastWidget = {
 };
 
 // scripts/utils/budget.ts
-import { readFile as readFile9, mkdir as mkdir4, writeFile as writeFile4 } from "fs/promises";
+import { readFile as readFile10, mkdir as mkdir4, writeFile as writeFile4 } from "fs/promises";
 import { join as join6 } from "path";
 import { homedir as homedir3 } from "os";
 var BUDGET_DIR = join6(homedir3(), ".cache", "claude-dashboard");
@@ -4196,7 +4281,7 @@ async function loadBudgetState() {
   }
   const fresh = { date: today, dailyTotal: 0, sessions: {} };
   try {
-    const content = await readFile9(BUDGET_FILE, "utf-8");
+    const content = await readFile10(BUDGET_FILE, "utf-8");
     const state = JSON.parse(content);
     if (state.date !== today || !Number.isFinite(state.dailyTotal) || !state.sessions || typeof state.sessions !== "object") {
       return fresh;
@@ -4830,7 +4915,7 @@ async function loadConfig() {
     if (configCache?.mtime === mtime) {
       return configCache.config;
     }
-    const content = await readFile10(CONFIG_PATH, "utf-8");
+    const content = await readFile11(CONFIG_PATH, "utf-8");
     const userConfig = JSON.parse(content);
     const config = {
       ...DEFAULT_CONFIG,

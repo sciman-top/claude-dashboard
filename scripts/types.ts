@@ -992,7 +992,12 @@ export interface TranscriptEntry {
  * are updated in processEntries() so extract functions read O(1).
  */
 export interface ParsedTranscript {
-  toolUses: Map<string, { name: string; timestamp?: string; input?: unknown }>;
+  /**
+   * Running tools only — entries are deleted when their tool_result arrives. `target`
+   * is resolved on sight; `input` keeps just the fields later consumers read (see
+   * retainToolInput), since this map is persisted with the parse state.
+   */
+  toolUses: Map<string, { name: string; timestamp?: string; target?: string; input?: unknown }>;
   /** Count of completed tools (replaces unbounded Set for memory efficiency) */
   completedToolCount: number;
   sessionStartTime?: number;
