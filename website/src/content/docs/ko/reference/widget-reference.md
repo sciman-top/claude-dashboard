@@ -160,8 +160,8 @@ sidebar:
 ### burnRate
 
 - **ID**: `burnRate`
-- **데이터 소스**: transcript (요청별 usage) + session (경과 시간)
-- **표시 내용**: 분당 토큰 소비량 (세션 평균). 메인 대화의 모든 요청에서 input + cache write + output 토큰을 transcript로 합산해 세션 경과 시간으로 나눕니다. cache read는 매 호출마다 프롬프트 전체를 다시 읽으므로 포함하면 소비가 아니라 컨텍스트 크기를 따라가게 되어 제외합니다. subagent 요청은 포함하지 않습니다. 세션 시작 시 `0/min`.
+- **데이터 소스**: transcript (요청별 usage + 첫 엔트리 시각)
+- **표시 내용**: 분당 토큰 소비량 (세션 평균). 메인 대화의 모든 요청에서 input + cache write + output 토큰을 transcript로 합산해 transcript 첫 엔트리 이후 경과 시간으로 나눕니다(유휴 시간·resume 포함 — 위젯을 언제 켜도 같은 구간을 봅니다). cache read는 매 호출마다 프롬프트 전체를 다시 읽으므로 포함하면 소비가 아니라 컨텍스트 크기를 따라가게 되어 제외합니다. subagent 요청은 포함하지 않습니다. 세션 시작 시 `0/min`.
 - **출력 예시**: `🔥 5K/min`, `🔥 12K/min`
 
 ### tokenSpeed

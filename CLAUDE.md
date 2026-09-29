@@ -157,7 +157,7 @@ interface Widget<T extends WidgetData> {
 | `toolActivity` | transcript | Tool tracking with target display (e.g., `Read(app.ts)`, `Bash(npm test)`) |
 | `agentStatus` | transcript + env | Agent tracking (`Agent`/legacy `Task` tool). Shows the subagent's model when resolvable: per-invocation `model` param, or `CLAUDE_CODE_SUBAGENT_MODEL` for built-in `general-purpose`/`claude` (FORCE pins all but `fork`/`Explore`). Hidden suffix when it inherits |
 | `todoProgress` | transcript | Todo completion |
-| `burnRate` | transcript + session | Session-average tokens per minute: input + cache write + output summed from the transcript (cache reads excluded) over elapsed time |
+| `burnRate` | transcript | Session-average tokens per minute: input + cache write + output summed from the transcript (cache reads excluded) over the time since the transcript's first entry |
 | `cacheHit` | stdin | Cache hit rate percentage (last request, from `context_window.current_usage`) |
 | `promptCache` | stdin | Session-wide prompt cache health from `prompt_cache` (≥ 2.1.251): ♨️ warm + time left until cold (from `expires_at`) / ❄️ cold, `hit_ratio` %, `miss N` (localized). Hidden until first API response or when `caching_observed` is false. Claude Code re-renders on its own at `expires_at`, so the warm→cold flip is automatic; the minute countdown in between only ticks with `statusLine.refreshInterval` |
 | `promptCacheState` | stdin | Warm/cold icon + time left only (sub-widget of `promptCache`) |

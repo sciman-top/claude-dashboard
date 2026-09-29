@@ -279,8 +279,8 @@ Agent: 3 done
 | Property | Value |
 |----------|-------|
 | **Widget ID** | `burnRate` |
-| **Data Source** | transcript (per-request usage) + session duration |
-| **Description** | Session-average token consumption per minute: input + cache write + output tokens of every main-conversation request, summed from the transcript, over the session's elapsed time. Cache reads are excluded — they re-read the whole prompt prefix on every call, so counting them tracks context size rather than spend. Subagent requests are not included. Shows `0/min` at session start. |
+| **Data Source** | transcript (per-request usage + first entry time) |
+| **Description** | Session-average token consumption per minute: input + cache write + output tokens of every main-conversation request, summed from the transcript, over the time since the transcript's first entry (idle time and resumed sessions included, so the figure stays consistent however late the widget is enabled). Cache reads are excluded — they re-read the whole prompt prefix on every call, so counting them tracks context size rather than spend. Subagent requests are not included. Shows `0/min` at session start. |
 
 **Example output:**
 ```
