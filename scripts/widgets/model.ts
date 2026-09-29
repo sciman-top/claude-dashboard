@@ -1,6 +1,7 @@
 /**
  * Model widget - displays current Claude model name and version with effort level and fast mode
- * e.g. "Opus 5.5(M) ↯"; the version is parsed from display_name (falls back to the model id form)
+ * e.g. "Opus 5.5(M) ↯"; the version is parsed from display_name (parseModelName also reads
+ * id-shaped names, but the widget itself only ever passes display_name)
  * @handbook 2.1-naming-conventions
  *
  * Effort level: Shown for Opus, Sonnet, and Fable (MAX/X/H/M/L), hidden for Haiku
