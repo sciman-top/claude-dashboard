@@ -195,6 +195,17 @@ describe('widgets', () => {
       expect(data?.displayName).toBe('Claude 3.5 Sonnet');
     });
 
+    // #98: sessions still on an older release must be distinguishable at a glance.
+    it('should render the model version before the badges', () => {
+      const ctx = createContext();
+      const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+      expect(plain(modelWidget.render(createModelData({ displayName: 'Opus 5.5', effortLevel: 'medium', fastMode: true }), ctx))).toBe('◆ Opus 5.5(M) ↯');
+      expect(plain(modelWidget.render(createModelData({ displayName: 'Opus 5 (1M context)', effortLevel: 'high' }), ctx))).toBe('◆ Opus 5(H)');
+      expect(plain(modelWidget.render(createModelData({ displayName: 'Haiku 4.5' }), ctx))).toBe('◆ Haiku 4.5');
+      expect(plain(modelWidget.render(createModelData({ displayName: 'Claude Opus', effortLevel: 'high' }), ctx))).toBe('◆ Opus(H)');
+    });
+
     it('should render shortened model name with effort for Sonnet', () => {
       const ctx = createContext();
       const result = modelWidget.render(

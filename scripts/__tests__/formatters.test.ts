@@ -8,6 +8,7 @@ import {
   formatCost,
   formatTimeRemaining,
   shortenModelName,
+  parseModelName,
   calculatePercent,
   formatDuration,
   formatWindowLabel,
@@ -70,6 +71,40 @@ describe('formatters', () => {
       const futureTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
       const result = formatTimeRemaining(futureTime, MOCK_TRANSLATIONS);
       expect(result).toMatch(/^\d+m$/);
+    });
+  });
+
+  describe('parseModelName', () => {
+    it('reads the version from current display names', () => {
+      expect(parseModelName('Opus 5.5')).toEqual({ family: 'Opus', version: '5.5' });
+      expect(parseModelName('Fable 5.1')).toEqual({ family: 'Fable', version: '5.1' });
+      expect(parseModelName('Claude Sonnet 5')).toEqual({ family: 'Sonnet', version: '5' });
+      expect(parseModelName('Haiku 4.5')).toEqual({ family: 'Haiku', version: '4.5' });
+    });
+
+    it('ignores parentheticals such as the 1M context tag', () => {
+      expect(parseModelName('Opus 5 (1M context)')).toEqual({ family: 'Opus', version: '5' });
+      expect(parseModelName('Sonnet 4.6 (1M context)')).toEqual({ family: 'Sonnet', version: '4.6' });
+    });
+
+    it('reads a version placed before the family (legacy names)', () => {
+      expect(parseModelName('Claude 3.5 Sonnet')).toEqual({ family: 'Sonnet', version: '3.5' });
+    });
+
+    it('reads model ids without mistaking date suffixes for versions', () => {
+      expect(parseModelName('claude-opus-4-8[1m]')).toEqual({ family: 'Opus', version: '4.8' });
+      expect(parseModelName('claude-fable-5')).toEqual({ family: 'Fable', version: '5' });
+      expect(parseModelName('claude-sonnet-4-20250514')).toEqual({ family: 'Sonnet', version: '4' });
+      expect(parseModelName('claude-3-5-sonnet-20241022')).toEqual({ family: 'Sonnet', version: '3.5' });
+    });
+
+    it('omits the version when there is none', () => {
+      expect(parseModelName('Claude Opus')).toEqual({ family: 'Opus', version: undefined });
+    });
+
+    it('keeps non-Claude names unversioned', () => {
+      expect(parseModelName('GPT-4')).toEqual({ family: 'GPT-4' });
+      expect(parseModelName('Claude Unknown')).toEqual({ family: 'Unknown' });
     });
   });
 

@@ -54,26 +54,50 @@ export function formatTimeRemaining(resetAt: string | Date, t: Translations): st
   return `${minutes}${t.time.minutes}`;
 }
 
+const MODEL_FAMILIES = ['Opus', 'Sonnet', 'Haiku', 'Fable'] as const;
+
 /**
- * Shorten model name
+ * Split a model name into its family and version.
+ * Examples: "Opus 5.5" -> { Opus, 5.5 }, "Opus 5 (1M context)" -> { Opus, 5 },
+ *           "Claude 3.5 Sonnet" -> { Sonnet, 3.5 }, "claude-opus-4-8[1m]" -> { Opus, 4.8 }
+ * Non-Claude names keep the "first word after Claude" / original-name fallback, no version.
+ */
+export function parseModelName(displayName: string): { family: string; version?: string } {
+  const lower = displayName.toLowerCase();
+  const family = MODEL_FAMILIES.find((f) => lower.includes(f.toLowerCase()));
+
+  if (!family) {
+    const parts = displayName.split(/\s+/);
+    if (parts.length > 1 && parts[0].toLowerCase() === 'claude') return { family: parts[1] };
+    return { family: displayName };
+  }
+
+  return { family, version: extractVersion(lower, family.toLowerCase()) };
+}
+
+function extractVersion(lower: string, family: string): string | undefined {
+  // Display names: a standalone number, either side of the family ("Opus 5.5",
+  // "Claude 3.5 Sonnet"). Parentheticals such as "(1M context)" are not versions.
+  const words = lower.replace(/\([^)]*\)/g, ' ').split(/\s+/);
+  const word = words.find((w) => /^\d+(\.\d+)?$/.test(w));
+  if (word) return word;
+
+  // Model ids: "claude-opus-4-8", "claude-3-5-sonnet-20241022". One- or two-digit
+  // parts only, so date suffixes are never read as versions.
+  const part = '(\\d{1,2})(?:-(\\d{1,2}))?(?![\\d])';
+  const match =
+    lower.match(new RegExp(`${family}-${part}`)) ?? lower.match(new RegExp(`claude-${part}-${family}`));
+  if (!match) return undefined;
+  return match[2] ? `${match[1]}.${match[2]}` : match[1];
+}
+
+/**
+ * Shorten model name to its family
  * Examples: "Claude 3.5 Sonnet" -> "Sonnet", "Claude Opus 4.5" -> "Opus",
  *           "Claude Fable 5" -> "Fable"
  */
 export function shortenModelName(displayName: string): string {
-  const lower = displayName.toLowerCase();
-
-  if (lower.includes('opus')) return 'Opus';
-  if (lower.includes('sonnet')) return 'Sonnet';
-  if (lower.includes('haiku')) return 'Haiku';
-  if (lower.includes('fable')) return 'Fable';
-
-  // Fallback: return first word after "Claude" or the original
-  const parts = displayName.split(/\s+/);
-  if (parts.length > 1 && parts[0].toLowerCase() === 'claude') {
-    return parts[1];
-  }
-
-  return displayName;
+  return parseModelName(displayName).family;
 }
 
 /**
