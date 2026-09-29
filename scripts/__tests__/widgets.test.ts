@@ -2602,6 +2602,19 @@ describe('widgets', () => {
       expect(data?.hourlyCost).toBe(3.0);
     });
 
+    // Cost is session-cumulative, so time must be too. The file clock starts when a
+    // clock widget first renders; enabling forecast 2 minutes before a 3-hour session's
+    // end used to divide $5 by 2 minutes (~$150/h). Regressing to the file clock makes
+    // this null: a fresh clock is under forecast's 1-minute minimum.
+    it('should divide by the session duration from stdin, not the widget file clock', async () => {
+      const ctx = createContext({
+        cost: { total_cost_usd: 5, total_duration_ms: 3 * 60 * 60 * 1000 },
+      });
+      const data = await forecastWidget.getData(ctx);
+
+      expect(data?.hourlyCost).toBeCloseTo(5 / 3, 5);
+    });
+
     it('should render with arrow and hourly rate', () => {
       const ctx = createContext();
       const data = { currentCost: 1.5, hourlyCost: 3.0 };

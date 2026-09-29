@@ -1827,8 +1827,8 @@ async function getSessionElapsedMs(sessionId) {
   return Date.now() - startTime;
 }
 async function getSessionElapsedMinutes(ctx, minMinutes = 1) {
-  const sessionId = ctx.stdin.session_id || "default";
-  const elapsedMs = await getSessionElapsedMs(sessionId);
+  const stdinMs = ctx.stdin.cost?.total_duration_ms;
+  const elapsedMs = typeof stdinMs === "number" && stdinMs > 0 ? stdinMs : await getSessionElapsedMs(ctx.stdin.session_id || "default");
   const elapsedMinutes = elapsedMs / (1e3 * 60);
   if (elapsedMinutes < minMinutes)
     return null;

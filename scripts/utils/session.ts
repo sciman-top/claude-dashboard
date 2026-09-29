@@ -157,13 +157,22 @@ export async function getSessionElapsedMs(sessionId: string): Promise<number> {
 /**
  * Get session elapsed minutes from context
  * Returns null if session is less than minMinutes old
+ *
+ * Prefers stdin cost.total_duration_ms: it spans the same session as the cumulative
+ * stdin values callers divide by it (cost.total_cost_usd). The file clock only starts
+ * when a clock-using widget first renders, so a widget enabled mid-session (e.g.
+ * switching from compact to detailed) would divide the whole session's cost by a
+ * few minutes. The file clock remains the fallback for Claude Code without the field.
  */
 export async function getSessionElapsedMinutes(
   ctx: WidgetContext,
   minMinutes = 1
 ): Promise<number | null> {
-  const sessionId = ctx.stdin.session_id || 'default';
-  const elapsedMs = await getSessionElapsedMs(sessionId);
+  const stdinMs = ctx.stdin.cost?.total_duration_ms;
+  const elapsedMs =
+    typeof stdinMs === 'number' && stdinMs > 0
+      ? stdinMs
+      : await getSessionElapsedMs(ctx.stdin.session_id || 'default');
   const elapsedMinutes = elapsedMs / (1000 * 60);
 
   if (elapsedMinutes < minMinutes) return null;
