@@ -39,7 +39,7 @@ Configure the claude-dashboard status line plugin with widget system support.
 
 | Widget | Description |
 |--------|-------------|
-| `model` | Model name with emoji, effort level (Opus/Sonnet/Fable), fast mode (Opus) |
+| `model` | Model name and version with emoji (e.g. `Opus 5.5`), effort level (Opus/Sonnet/Fable), fast mode (Opus) |
 | `context` | Progress bar, percentage, tokens |
 | `contextBar` | Progress bar only (sub-widget of `context`) |
 | `contextPercentage` | Percentage only (sub-widget of `context`) |
@@ -57,7 +57,7 @@ Configure the claude-dashboard status line plugin with widget system support.
 | `toolActivity` | Running/completed tools with targets (e.g., `Read(app.ts)`) |
 | `agentStatus` | Subagent progress |
 | `todoProgress` | Todo completion rate |
-| `burnRate` | Token consumption per minute |
+| `burnRate` | Token consumption per minute, session average (input + cache write + output) |
 | `cacheHit` | Cache hit rate percentage (last request) |
 | `promptCache` | Session prompt-cache health: ♨️ warm with time left before it goes cold / ❄️ cold, hit ratio, miss count (Claude Code ≥ 2.1.251) |
 | `promptCacheState` | Warm/cold icon + time left only (sub-widget of `promptCache`) |
@@ -74,7 +74,8 @@ Configure the claude-dashboard status line plugin with widget system support.
 | `performance` | Composite efficiency badge (cache hit + output ratio) |
 | `forecast` | Estimated hourly cost based on session rate |
 | `budget` | Daily spending vs configured budget limit (requires `dailyBudget` in config) |
-| `tokenSpeed` | Output token generation speed (e.g., `67 tok/s`) |
+| `tokenSpeed` | Output token generation speed, session average (e.g., `67 tok/s`) |
+| `tokenSpeedLast` | Output token generation speed of the most recent response (e.g., `last 150 tok/s`) |
 | `sessionName` | Session name from /rename command |
 | `todayCost` | Total spending across all sessions today |
 | `linesChanged` | Uncommitted lines added/removed, including untracked files (+N -N) |
@@ -99,16 +100,16 @@ Use AskUserQuestion to ask the user. Batch independent questions into a single A
 1. Display mode — MUST include `markdown` field on each option for visual preview:
    - compact (recommended), markdown:
      ```
-     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      ```
    - normal, markdown:
      ```
-     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      📁 project (main ↑3) │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ✓ 3/5
      ```
    - detailed, markdown:
      ```
-     ◆ Opus(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
+     ◆ Opus 5.5(X) │ ██░░ 80% │ $1.25 │ 5h: 42% │ 7d: 69%
      📁 project (main ↑3) │ 🔑 abc123 │ ⏱ 45m │ 🔥 5K/m │ ⏳ 2h │ ✓ 3/5
      CLAUDE.md: 2 │ ⚙️ 12 done │ 🤖 Agent: 1 │ 📦 85% │ 🟢 72%
      📊 In 30K · Out 8K │ 📈 ~$8/h │ 💵 $5/$15 │ 🔷 codex │ 💎 gemini │ 🪐 antigravity
@@ -135,7 +136,7 @@ Single AskUserQuestion call with `multiSelect: true`, max 4 options. Ask: "Line 
 1. **Model & Context** — `model`, `context`, `contextBar`, `contextPercentage`, `contextUsage`
 2. **Cost & Limits** — `cost`, `rateLimit5h`, `rateLimit7d`, `rateLimit7dSonnet`, `rateLimit7dFable`, `budget`, `forecast`, `todayCost`
 3. **Project, Session & Activity** — `projectInfo`, `sessionId`, `sessionIdFull`, `sessionDuration`, `sessionName`, `configCounts`, `toolActivity`, `agentStatus`, `agentMode`, `todoProgress`, `outputStyle`, `vimMode`, `linesChanged`, `version`, `lastPrompt`, `slashCommand`
-4. **Performance, Tokens & Other CLIs** — `burnRate`, `tokenSpeed`, `cacheHit`, `promptCache`, `promptCacheState`, `promptCacheHit`, `promptCacheMisses`, `performance`, `tokenBreakdown`, `depletionTime`, `apiDuration`, `peakHours`, `tagStatus`, `codexUsage`, `geminiUsage`, `geminiUsageAll`, `antigravityUsage`, `antigravityUsageAll`, `zaiUsage`
+4. **Performance, Tokens & Other CLIs** — `burnRate`, `tokenSpeed`, `tokenSpeedLast`, `cacheHit`, `promptCache`, `promptCacheState`, `promptCacheHit`, `promptCacheMisses`, `performance`, `tokenBreakdown`, `depletionTime`, `apiDuration`, `peakHours`, `tagStatus`, `codexUsage`, `geminiUsage`, `geminiUsageAll`, `antigravityUsage`, `antigravityUsageAll`, `zaiUsage`
 
 **Step B — Pick widgets from each selected category:**
 For every category the user selected in Step A, send one AskUserQuestion call with `multiSelect: true` listing the widgets in that category. AskUserQuestion allows max 4 options per call, so if a category has more than 4 widgets, split into multiple consecutive calls (e.g. "Cost & Limits (1/2)", "Cost & Limits (2/2)") — the user can pick zero or more widgets from each page.
@@ -199,7 +200,7 @@ Create `~/.claude/claude-dashboard.local.json`:
 }
 ```
 
-Preset characters: `M`=model, `C`=context, `b`=contextBar, `%`=contextPercentage, `#`=contextUsage, `$`=cost, `R`=rateLimit5h, `7`=rateLimit7d, `S`=7dSonnet, `f`=7dFable, `P`=projectInfo, `I`=sessionId, `D`=sessionDuration, `T`=toolActivity, `A`=agentStatus, `g`=agentMode, `O`=todoProgress, `B`=burnRate, `E`=depletionTime, `H`=cacheHit, `c`=promptCache, `w`=promptCacheState, `h`=promptCacheHit, `x`=promptCacheMisses, `X`=codexUsage, `G`=geminiUsage, `^`=antigravityUsage, `Z`=zaiUsage, `K`=configCounts, `N`=tokenBreakdown, `F`=performance, `W`=forecast, `U`=budget, `L`=linesChanged, `Y`=outputStyle, `V`=version, `Q`=tokenSpeed, `J`=sessionName, `@`=todayCost, `?`=lastPrompt, `/`=slashCommand, `m`=vimMode, `a`=apiDuration, `p`=peakHours, `t`=tagStatus. Use `|` to separate lines.
+Preset characters: `M`=model, `C`=context, `b`=contextBar, `%`=contextPercentage, `#`=contextUsage, `$`=cost, `R`=rateLimit5h, `7`=rateLimit7d, `S`=7dSonnet, `f`=7dFable, `P`=projectInfo, `I`=sessionId, `D`=sessionDuration, `T`=toolActivity, `A`=agentStatus, `g`=agentMode, `O`=todoProgress, `B`=burnRate, `E`=depletionTime, `H`=cacheHit, `c`=promptCache, `w`=promptCacheState, `h`=promptCacheHit, `x`=promptCacheMisses, `X`=codexUsage, `G`=geminiUsage, `^`=antigravityUsage, `Z`=zaiUsage, `K`=configCounts, `N`=tokenBreakdown, `F`=performance, `W`=forecast, `U`=budget, `L`=linesChanged, `Y`=outputStyle, `V`=version, `Q`=tokenSpeed, `q`=tokenSpeedLast, `J`=sessionName, `@`=todayCost, `?`=lastPrompt, `/`=slashCommand, `m`=vimMode, `a`=apiDuration, `p`=peakHours, `t`=tagStatus. Use `|` to separate lines.
 
 **For custom mode:**
 ```json

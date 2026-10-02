@@ -3,7 +3,7 @@
  * @covers scripts/utils/transcript-parser.ts
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, writeFile, rm } from 'fs/promises';
+import { mkdir, writeFile, appendFile, readFile, readdir, rm } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 
@@ -14,9 +14,12 @@ describe('transcript-parser', () => {
   beforeEach(async () => {
     vi.resetModules();
     await mkdir(TEST_DIR, { recursive: true });
+    // Keep the persisted parse state (FILE_CACHE_DIR) inside the test dir, not ~/.cache.
+    vi.spyOn(os, 'homedir').mockReturnValue(TEST_DIR);
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     try {
       await rm(TEST_DIR, { recursive: true, force: true });
     } catch {
@@ -1135,6 +1138,351 @@ describe('transcript-parser', () => {
       const transcript = await parseTranscript(TEST_FILE);
 
       expect(getActiveSlashCommand(transcript!)).toBeNull();
+    });
+  });
+
+  describe('token accounting', () => {
+    // A response streams in as several records sharing one message id, and the usage
+    // block repeats on each — the leading ones usually carry output_tokens: 0, with
+    // the real count on the last. Marking an id as counted on first sight would bank
+    // the zeroes and drop the response, so the accumulator only counts non-zero values.
+    it('counts a response once, at its non-zero value', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { output_tokens: 0 } } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:06.000Z', message: { id: 'msg_a', usage: { output_tokens: 1200 } } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:06.100Z', message: { id: 'msg_a', usage: { output_tokens: 1200 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionOutputTokens).toBe(1200);
+    });
+
+    it('sums output tokens and spans across responses', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'one' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { output_tokens: 100 } } },
+        { type: 'user', timestamp: '2024-01-01T00:00:10.000Z', message: { content: 'two' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:15.000Z', message: { id: 'msg_b', usage: { output_tokens: 200 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionOutputTokens).toBe(300);
+      expect(transcript!.sessionRequestMs).toBe(10000);
+    });
+
+    // The span must start at the turn that triggered the request. A response's own
+    // first-to-last record gap covers only the tail of the stream and would overstate
+    // the rate several-fold.
+    it('measures the newest response from the preceding turn', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'one' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { output_tokens: 100 } } },
+        { type: 'user', timestamp: '2024-01-01T00:00:10.000Z', message: { content: 'two' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:12.000Z', message: { id: 'msg_b', usage: { output_tokens: 400 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.lastRequestOutput).toBe(400);
+      // 00:00:10 → 00:00:12, not 00:00:12 minus the response's own first record.
+      expect(transcript!.lastRequestDurationMs).toBe(2000);
+    });
+
+    it('keeps the newest response when an earlier one had more output', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'one' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { output_tokens: 900 } } },
+        { type: 'user', timestamp: '2024-01-01T00:00:10.000Z', message: { content: 'two' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:11.000Z', message: { id: 'msg_b', usage: { output_tokens: 50 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.lastRequestOutput).toBe(50);
+      expect(transcript!.lastRequestDurationMs).toBe(1000);
+      // ...while the session total still holds both.
+      expect(transcript!.sessionOutputTokens).toBe(950);
+    });
+
+    it('leaves the span unset when no turn precedes the response', async () => {
+      await writeTranscript([
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { output_tokens: 100 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.lastRequestOutput).toBe(100);
+      expect(transcript!.lastRequestDurationMs).toBeUndefined();
+    });
+
+    it('excludes an unmeasured response from both session totals', async () => {
+      await writeTranscript([
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { output_tokens: 100 } } },
+        { type: 'user', timestamp: '2024-01-01T00:00:10.000Z', message: { content: 'two' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:12.000Z', message: { id: 'msg_b', usage: { output_tokens: 400 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionOutputTokens).toBe(400);
+      expect(transcript!.sessionRequestMs).toBe(2000);
+    });
+
+    // Only user entries (prompt / tool_result) start a request; a system or attachment
+    // entry between the trigger and the response must not shorten the span.
+    it('ignores non-user entries when finding the request start', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'system', timestamp: '2024-01-01T00:00:03.000Z', content: 'retrying' },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:04.000Z', message: { id: 'msg_a', usage: { output_tokens: 400 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.lastRequestDurationMs).toBe(4000);
+    });
+
+    // With streaming tool execution a tool_result can be written before the rest of
+    // the same response; the response's start must stay pinned.
+    it('keeps the request start pinned when a tool_result interleaves its records', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:02.000Z', message: { id: 'msg_a', usage: { output_tokens: 0 } } },
+        { type: 'user', timestamp: '2024-01-01T00:00:03.000Z', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:04.000Z', message: { id: 'msg_a', usage: { output_tokens: 800 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.lastRequestDurationMs).toBe(4000);
+      expect(transcript!.sessionOutputTokens).toBe(800);
+      expect(transcript!.sessionRequestMs).toBe(4000);
+    });
+
+    // burnRate consumption: input + cache write + output, cache reads excluded, each
+    // response once at its final values even though usage repeats on every record.
+    it('sums consumed tokens once per response, excluding cache reads', async () => {
+      const usage = (output: number) => ({
+        input_tokens: 5,
+        cache_creation_input_tokens: 300,
+        cache_read_input_tokens: 90000,
+        output_tokens: output,
+      });
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'one' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:01.000Z', message: { id: 'msg_a', usage: usage(0) } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:02.000Z', message: { id: 'msg_a', usage: usage(200) } },
+        { type: 'user', timestamp: '2024-01-01T00:00:03.000Z', message: { content: 'two' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:04.000Z', message: { id: 'msg_b', usage: usage(100) } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      // (5 + 300 + 200) + (5 + 300 + 100)
+      expect(transcript!.sessionConsumedTokens).toBe(910);
+    });
+
+    it('counts consumption once for a response split across incremental reads', async () => {
+      const usage = (output: number) => ({ input_tokens: 5, cache_creation_input_tokens: 300, output_tokens: output });
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:01.000Z', message: { id: 'msg_a', usage: usage(0) } },
+      ]);
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      await parseTranscript(TEST_FILE);
+
+      await appendFile(
+        TEST_FILE,
+        '\n' + JSON.stringify({ type: 'assistant', timestamp: '2024-01-01T00:00:03.000Z', message: { id: 'msg_a', usage: usage(700) } }) + '\n'
+      );
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionConsumedTokens).toBe(1005);
+    });
+
+    it('counts consumption for a response with no measurable span', async () => {
+      await writeTranscript([
+        { type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { input_tokens: 10, output_tokens: 90 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionConsumedTokens).toBe(100);
+      expect(transcript!.sessionOutputTokens).toBe(0);
+    });
+
+    it('ignores non-finite token counts', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:02.000Z', message: { id: 'msg_a', usage: { input_tokens: 10, output_tokens: 400 } } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:03.000Z', message: { id: 'msg_a', usage: { input_tokens: -1, output_tokens: 1e400 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.lastRequestOutput).toBe(400);
+      expect(transcript!.sessionConsumedTokens).toBe(410);
+    });
+
+    it('ignores sidechain records', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'user', isSidechain: true, timestamp: '2024-01-01T00:00:01.000Z', message: { content: 'sub task' } },
+        { type: 'assistant', isSidechain: true, timestamp: '2024-01-01T00:00:02.000Z', message: { id: 'msg_sub', usage: { output_tokens: 999 } } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:04.000Z', message: { id: 'msg_a', usage: { output_tokens: 400 } } },
+      ]);
+
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionOutputTokens).toBe(400);
+      expect(transcript!.lastRequestDurationMs).toBe(4000);
+    });
+
+    // A response whose records straddle two incremental reads must be counted once,
+    // at its final value.
+    it('counts a response split across incremental reads once', async () => {
+      await writeTranscript([
+        { type: 'user', timestamp: '2024-01-01T00:00:00.000Z', message: { content: 'hi' } },
+        { type: 'assistant', timestamp: '2024-01-01T00:00:02.000Z', message: { id: 'msg_a', usage: { output_tokens: 300 } } },
+      ]);
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      await parseTranscript(TEST_FILE);
+
+      await appendFile(
+        TEST_FILE,
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-01T00:00:05.000Z', message: { id: 'msg_a', usage: { output_tokens: 1000 } } }) + '\n'
+      );
+      const transcript = await parseTranscript(TEST_FILE);
+
+      expect(transcript!.sessionOutputTokens).toBe(1000);
+      expect(transcript!.sessionRequestMs).toBe(5000);
+    });
+  });
+  describe('persisted parse state', () => {
+    const entry = (id: string, out: number, t: string) =>
+      JSON.stringify({ type: 'assistant', timestamp: t, message: { id, usage: { output_tokens: out } } });
+    const user = (t: string) => JSON.stringify({ type: 'user', timestamp: t, message: { content: 'hi' } });
+
+    /** Path of the persisted parse state (FILE_CACHE_DIR is under the mocked homedir). */
+    async function stateFilePath(): Promise<string> {
+      const dir = path.join(TEST_DIR, '.cache', 'claude-dashboard');
+      const [file] = (await readdir(dir)).filter((f) => f.startsWith('transcript-'));
+      return path.join(dir, file);
+    }
+
+    // Each status line render is a new process; a fresh module simulates that.
+    async function freshParse() {
+      vi.resetModules();
+      const { parseTranscript } = await import('../utils/transcript-parser.js');
+      return parseTranscript(TEST_FILE);
+    }
+
+    // Proves the second process resumed rather than re-parsing: the persisted total is
+    // tampered with, and only a resumed parse carries the tampered value forward.
+    it('resumes from persisted state in a new process', async () => {
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + entry('msg_a', 100, '2024-01-01T00:00:02.000Z') + '\n');
+      await freshParse();
+
+      const statePath = await stateFilePath();
+      const persisted = JSON.parse(await readFile(statePath, 'utf-8'));
+      persisted.data.state.data.sessionOutputTokens = 10000;
+      await writeFile(statePath, JSON.stringify(persisted));
+
+      await appendFile(TEST_FILE, user('2024-01-01T00:00:10.000Z') + '\n' + entry('msg_b', 300, '2024-01-01T00:00:13.000Z') + '\n');
+      const transcript = await freshParse();
+
+      expect(transcript!.sessionOutputTokens).toBe(10300);
+    });
+
+    it('round-trips Maps and Sets', async () => {
+      await writeFile(
+        TEST_FILE,
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          message: { id: 'msg_a', content: [{ type: 'tool_use', id: 'tool_1', name: 'Read', input: { file_path: '/a/b.ts' } }] },
+        }) + '\n'
+      );
+      await freshParse();
+      await appendFile(TEST_FILE, user('2024-01-01T00:00:05.000Z') + '\n');
+      const transcript = await freshParse();
+
+      expect(transcript!.runningToolIds).toBeInstanceOf(Set);
+      expect(transcript!.runningToolIds.has('tool_1')).toBe(true);
+      expect(transcript!.toolUses).toBeInstanceOf(Map);
+      expect(transcript!.toolUses.get('tool_1')?.name).toBe('Read');
+    });
+
+    // toolUses is saved with the state; a running Write/Agent must not drag its body or
+    // prompt into every save, while the fields widgets read must survive the round-trip.
+    it('persists only the tool input fields consumers read', async () => {
+      const body = 'x'.repeat(50_000);
+      await writeFile(
+        TEST_FILE,
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          message: {
+            id: 'msg_a',
+            content: [
+              { type: 'tool_use', id: 'w1', name: 'Write', input: { file_path: '/src/app.ts', content: body } },
+              { type: 'tool_use', id: 'a1', name: 'Agent', input: { description: 'scan', subagent_type: 'scout', model: 'haiku', prompt: body } },
+            ],
+          },
+        }) + '\n'
+      );
+      await freshParse();
+
+      expect((await readFile(await stateFilePath(), 'utf-8')).length).toBeLessThan(5_000);
+
+      const { getRunningTools, extractAgentStatus } = await import('../utils/transcript-parser.js');
+      const transcript = await freshParse();
+      expect(getRunningTools(transcript!).find((t) => t.name === 'Write')?.target).toBe('app.ts');
+      expect(extractAgentStatus(transcript!).active[0]).toMatchObject({ name: 'scout', description: 'scan', model: 'haiku' });
+    });
+
+    it('leaves a half-written trailing line for the next read', async () => {
+      const full = entry('msg_a', 700, '2024-01-01T00:00:03.000Z');
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + full.slice(0, 40));
+      expect((await freshParse())!.lastRequestOutput).toBe(0);
+
+      await appendFile(TEST_FILE, full.slice(40) + '\n');
+      expect((await freshParse())!.lastRequestOutput).toBe(700);
+    });
+
+    it('rebuilds when the path now holds a different file', async () => {
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + entry('msg_a', 100, '2024-01-01T00:00:02.000Z') + '\n');
+      await freshParse();
+
+      // Same path, different (longer) content: resuming at the old offset would be wrong.
+      await writeFile(TEST_FILE, user('2025-06-01T00:00:00.000Z') + '\n' + entry('msg_z', 900, '2025-06-01T00:00:04.000Z') + '\n' + user('2025-06-01T00:00:09.000Z') + '\n');
+      const transcript = await freshParse();
+
+      expect(transcript!.sessionOutputTokens).toBe(900);
+      expect(transcript!.lastRequestId).toBe('msg_z');
+    });
+
+    it('rebuilds when the file was truncated', async () => {
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n' + entry('msg_a', 100, '2024-01-01T00:00:02.000Z') + '\n');
+      await freshParse();
+
+      await writeFile(TEST_FILE, user('2024-01-01T00:00:00.000Z') + '\n');
+      expect((await freshParse())!.sessionOutputTokens).toBe(0);
     });
   });
 });

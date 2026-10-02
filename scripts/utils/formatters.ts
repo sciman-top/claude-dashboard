@@ -54,26 +54,60 @@ export function formatTimeRemaining(resetAt: string | Date, t: Translations): st
   return `${minutes}${t.time.minutes}`;
 }
 
+const MODEL_FAMILIES = ['Opus', 'Sonnet', 'Haiku', 'Fable'] as const;
+
+const PARENTHETICAL = /\([^)]*\)/g;
+const VERSION_WORD = /^\d+(\.\d+)?$/;
+// One- or two-digit parts, "-" or "." separated, so date suffixes never read as versions.
+const ID_VERSION = '(\\d{1,2})(?:[-.](\\d{1,2}))?(?!\\d)';
+/** Per family: family-first ids ("claude-opus-4-8") and version-first ids ("claude-3-5-sonnet"). */
+const ID_PATTERNS = new Map(
+  MODEL_FAMILIES.map((f) => {
+    const key = f.toLowerCase();
+    return [key, [new RegExp(`${key}-${ID_VERSION}`), new RegExp(`claude-${ID_VERSION}-${key}`)]] as const;
+  })
+);
+
 /**
- * Shorten model name
+ * Split a model name into its family and version.
+ * Examples: "Opus 5.5" -> { Opus, 5.5 }, "Opus 5 (1M context)" -> { Opus, 5 },
+ *           "Claude 3.5 Sonnet" -> { Sonnet, 3.5 }, "claude-opus-4-8[1m]" -> { Opus, 4.8 }
+ * Non-Claude names keep the "first word after Claude" / original-name fallback, no version.
+ */
+export function parseModelName(displayName: string): { family: string; version?: string } {
+  const lower = displayName.toLowerCase();
+  const family = MODEL_FAMILIES.find((f) => lower.includes(f.toLowerCase()));
+
+  if (!family) {
+    const parts = displayName.split(/\s+/);
+    if (parts.length > 1 && parts[0].toLowerCase() === 'claude') return { family: parts[1] };
+    return { family: displayName };
+  }
+
+  return { family, version: extractVersion(lower, family.toLowerCase()) };
+}
+
+function extractVersion(lower: string, family: string): string | undefined {
+  // Display names: a standalone number, either side of the family ("Opus 5.5",
+  // "Claude 3.5 Sonnet"). Parentheticals such as "(1M context)" are not versions.
+  const word = lower.replace(PARENTHETICAL, ' ').split(/\s+/).find((w) => VERSION_WORD.test(w));
+  if (word) return word;
+
+  // Model ids: "claude-opus-4-8", "claude-sonnet-3.5", "claude-3-5-sonnet-20241022".
+  for (const pattern of ID_PATTERNS.get(family) ?? []) {
+    const match = lower.match(pattern);
+    if (match) return match[2] ? `${match[1]}.${match[2]}` : match[1];
+  }
+  return undefined;
+}
+
+/**
+ * Shorten model name to its family
  * Examples: "Claude 3.5 Sonnet" -> "Sonnet", "Claude Opus 4.5" -> "Opus",
  *           "Claude Fable 5" -> "Fable"
  */
 export function shortenModelName(displayName: string): string {
-  const lower = displayName.toLowerCase();
-
-  if (lower.includes('opus')) return 'Opus';
-  if (lower.includes('sonnet')) return 'Sonnet';
-  if (lower.includes('haiku')) return 'Haiku';
-  if (lower.includes('fable')) return 'Fable';
-
-  // Fallback: return first word after "Claude" or the original
-  const parts = displayName.split(/\s+/);
-  if (parts.length > 1 && parts[0].toLowerCase() === 'claude') {
-    return parts[1];
-  }
-
-  return displayName;
+  return parseModelName(displayName).family;
 }
 
 /**

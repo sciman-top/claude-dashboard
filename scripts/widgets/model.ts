@@ -1,5 +1,7 @@
 /**
- * Model widget - displays current Claude model name with effort level and fast mode
+ * Model widget - displays current Claude model name and version with effort level and fast mode
+ * e.g. "Opus 5.5(M) ↯"; the version is parsed from display_name (parseModelName also reads
+ * id-shaped names, but the widget itself only ever passes display_name)
  * @handbook 2.1-naming-conventions
  *
  * Effort level: Shown for Opus, Sonnet, and Fable (MAX/X/H/M/L), hidden for Haiku
@@ -21,7 +23,7 @@ import type { Widget } from './base.js';
 import type { WidgetContext, ModelData, EffortLevel } from '../types.js';
 import { RESET, getTheme } from '../utils/colors.js';
 import { ICON } from '../utils/emoji.js';
-import { shortenModelName } from '../utils/formatters.js';
+import { parseModelName } from '../utils/formatters.js';
 import { isZaiProvider } from '../utils/provider.js';
 
 /**
@@ -206,17 +208,19 @@ export const modelWidget: Widget<ModelData> = {
   },
 
   render(data: ModelData): string {
-    const shortName = shortenModelName(data.displayName);
+    // Version is shown so sessions still on an older release stand out (#98).
+    // Badges key off the family alone, so the version never changes them.
+    const { family, version } = parseModelName(data.displayName);
+    const name = version ? `${family} ${version}` : family;
     const icon = isZaiProvider() ? ICON.orangeCircle : '◆';
 
     // Effort badge shown for Opus/Sonnet/Fable; Haiku has no effort tier
-    const supportsEffort =
-      shortName === 'Opus' || shortName === 'Sonnet' || shortName === 'Fable';
+    const supportsEffort = family === 'Opus' || family === 'Sonnet' || family === 'Fable';
     const effortSuffix = supportsEffort ? `(${EFFORT_BADGE[data.effortLevel]})` : '';
 
     // Fast mode indicator (Opus-only: Opus 5 / 4.8)
-    const fastIndicator = shortName === 'Opus' && data.fastMode ? ' ↯' : '';
+    const fastIndicator = family === 'Opus' && data.fastMode ? ' ↯' : '';
 
-    return `${getTheme().model}${icon} ${shortName}${effortSuffix}${fastIndicator}${RESET}`;
+    return `${getTheme().model}${icon} ${name}${effortSuffix}${fastIndicator}${RESET}`;
   },
 };

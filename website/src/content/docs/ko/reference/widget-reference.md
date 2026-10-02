@@ -13,8 +13,8 @@ sidebar:
 
 - **ID**: `model`
 - **데이터 소스**: stdin (모델 정보, 실시간 `effort.level` / `fast_mode`) + settings.json 폴백
-- **표시 내용**: 모델 이름과 이모지. Opus/Sonnet/Fable의 경우 effort 수준(MAX=max, X=xhigh, H=high, M=medium, L=low)을 표시합니다. Opus에서 빠른 모드가 활성화되면 (↯) 기호를 추가합니다. Claude Code가 stdin으로 보내는 실시간 `effort.level` / `fast_mode`를 우선 사용하므로 세션 중 `/effort` 변경과 세션 한정 선택이 그대로 반영되며, 이 필드가 없는 구버전 Claude Code에서는 `settings.json`으로 폴백합니다.
-- **출력 예시**: `◆ Opus(X)`, `◆ Opus(X) ↯`, `◆ Sonnet(M)`, `◆ Haiku`
+- **표시 내용**: 모델 이름·버전과 이모지. 버전은 `display_name`에서 읽으며(`Opus 5 (1M context)` → `Opus 5`), 없으면 이름만 표시합니다. Opus/Sonnet/Fable의 경우 effort 수준(MAX=max, X=xhigh, H=high, M=medium, L=low)을 표시합니다. Opus에서 빠른 모드가 활성화되면 (↯) 기호를 추가합니다. Claude Code가 stdin으로 보내는 실시간 `effort.level` / `fast_mode`를 우선 사용하므로 세션 중 `/effort` 변경과 세션 한정 선택이 그대로 반영되며, 이 필드가 없는 구버전 Claude Code에서는 `settings.json`으로 폴백합니다.
+- **출력 예시**: `◆ Opus 5.5(X)`, `◆ Opus 5.5(X) ↯`, `◆ Sonnet 5(M)`, `◆ Haiku 4.5`
 
 ### context
 
@@ -160,16 +160,23 @@ sidebar:
 ### burnRate
 
 - **ID**: `burnRate`
-- **데이터 소스**: stdin (토큰) + session (경과 시간)
-- **표시 내용**: 분당 토큰 소비량 (세션 평균).
-- **출력 예시**: `🔥 5K/m`, `🔥 12K/m`
+- **데이터 소스**: transcript (요청별 usage + 첫 엔트리 시각)
+- **표시 내용**: 분당 토큰 소비량 (세션 평균). 메인 대화의 모든 요청에서 input + cache write + output 토큰을 transcript로 합산해 transcript 첫 엔트리 이후 경과 시간으로 나눕니다(유휴 시간·resume 포함 — 위젯을 언제 켜도 같은 구간을 봅니다). cache read는 매 호출마다 프롬프트 전체를 다시 읽으므로 포함하면 소비가 아니라 컨텍스트 크기를 따라가게 되어 제외합니다. subagent 요청은 포함하지 않습니다. 세션 시작 시 `0/min`.
+- **출력 예시**: `🔥 5K/min`, `🔥 12K/min`
 
 ### tokenSpeed
 
 - **ID**: `tokenSpeed`
-- **데이터 소스**: stdin
-- **표시 내용**: 출력 토큰 생성 속도. 초당 생성되는 토큰 수를 표시합니다.
+- **데이터 소스**: transcript (출력 토큰 + 턴 타이밍)
+- **표시 내용**: 세션 평균 출력 속도. 메인 대화의 출력 토큰을 각 요청의 실제 소요 시간 합으로 나눕니다(요청을 유발한 프롬프트/tool result부터 측정하므로 첫 토큰 대기 시간 포함). subagent 호출은 제외됩니다. 긴 세션에서는 천천히 움직이므로 최근 응답은 `tokenSpeedLast`를 사용하세요. 측정된 요청이 생기기 전까지 숨겨집니다.
 - **출력 예시**: `⚡ 67 tok/s`, `⚡ 120 tok/s`
+
+### tokenSpeedLast
+
+- **ID**: `tokenSpeedLast`
+- **데이터 소스**: transcript (출력 토큰 + 턴 타이밍)
+- **표시 내용**: 가장 최근 응답 하나의 출력 속도. 측정 방식은 `tokenSpeed`와 같고, 나란히 표시해도 구분되도록 라벨이 붙습니다. 도구 호출만 하는 짧은 응답은 첫 토큰 대기 시간 비중이 커서 값이 낮게 나오며, 이는 해당 요청의 실제 처리량입니다. 출력과 측정 가능한 구간이 모두 생기기 전까지 숨겨집니다.
+- **출력 예시**: `⚡ 최근 150 tok/s`
 
 ### cacheHit
 

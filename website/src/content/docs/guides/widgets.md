@@ -5,13 +5,13 @@ sidebar:
   order: 2
 ---
 
-claude-dashboard provides 40 widgets organized by category. Each widget can be individually enabled, disabled, or rearranged in your layout.
+claude-dashboard provides 49 widgets organized by category. Each widget can be individually enabled, disabled, or rearranged in your layout.
 
 ## Core
 
 | Widget | Description |
 |--------|-------------|
-| `model` | Model name with emoji, effort level for Opus/Sonnet/Fable (MAX/X/H/M/L), fast mode for Opus (↯) |
+| `model` | Model name and version with emoji (e.g. `Opus 5.5`), effort level for Opus/Sonnet/Fable (MAX/X/H/M/L), fast mode for Opus (↯) |
 | `context` | Progress bar, percentage, tokens (green 0-50% / yellow 51-80% / red 81-100%) |
 | `contextBar` | Progress bar only (sub-widget of `context`) |
 | `contextPercentage` | Percentage only (sub-widget of `context`) |
@@ -51,8 +51,9 @@ claude-dashboard provides 40 widgets organized by category. Each widget can be i
 
 | Widget | Description |
 |--------|-------------|
-| `burnRate` | Token consumption per minute |
-| `tokenSpeed` | Output token generation speed (e.g., `67 tok/s`) |
+| `burnRate` | Token consumption per minute, session average (input + cache write + output) |
+| `tokenSpeed` | Output token generation speed, session average (e.g., `67 tok/s`) |
+| `tokenSpeedLast` | Output token generation speed of the most recent response (e.g., `last 150 tok/s`) |
 | `cacheHit` | Cache hit rate percentage (last request) |
 | `promptCache` | Session prompt-cache health: ♨️ warm with time left before it goes cold / ❄️ cold, hit ratio, miss count (Claude Code ≥ 2.1.251) |
 | `promptCacheState` | Warm/cold icon + time left only (sub-widget of `promptCache`) |

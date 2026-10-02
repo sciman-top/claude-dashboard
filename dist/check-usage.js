@@ -95,7 +95,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.33.0";
+var VERSION = "1.34.0";
 
 // scripts/utils/debug.ts
 var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
@@ -125,7 +125,8 @@ var CLEANABLE_PREFIXES = [
   "gemini-usage-",
   "antigravity-usage-",
   "antigravity-token-",
-  "zai-usage-"
+  "zai-usage-",
+  "transcript-"
 ];
 var lastCleanupTime = 0;
 function fileCachePath(name) {
@@ -1103,6 +1104,14 @@ function formatTimeRemaining(resetAt, t) {
   }
   return `${minutes}${t.time.minutes}`;
 }
+var MODEL_FAMILIES = ["Opus", "Sonnet", "Haiku", "Fable"];
+var ID_VERSION = "(\\d{1,2})(?:[-.](\\d{1,2}))?(?!\\d)";
+var ID_PATTERNS = new Map(
+  MODEL_FAMILIES.map((f) => {
+    const key = f.toLowerCase();
+    return [key, [new RegExp(`${key}-${ID_VERSION}`), new RegExp(`claude-${ID_VERSION}-${key}`)]];
+  })
+);
 function clampPercent(value) {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
@@ -2161,6 +2170,7 @@ var en_default = {
     hooks: "Hooks",
     burnRate: "Rate",
     cache: "Cache",
+    tokenSpeedLast: "last",
     cacheMiss: "miss",
     toLimit: "to",
     forecast: "Forecast",
@@ -2222,6 +2232,7 @@ var ko_default = {
     hooks: "\uD6C5",
     burnRate: "\uC18C\uBAA8\uC728",
     cache: "\uCE90\uC2DC",
+    tokenSpeedLast: "\uCD5C\uADFC",
     cacheMiss: "miss",
     toLimit: "\uD6C4",
     forecast: "\uC608\uCE21",

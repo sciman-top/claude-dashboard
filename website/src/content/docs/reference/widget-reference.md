@@ -15,13 +15,14 @@ This page provides detailed information about each widget, including its data so
 |----------|-------|
 | **Widget ID** | `model` |
 | **Data Source** | stdin (model info, live `effort.level` / `fast_mode`) + settings.json fallback |
-| **Description** | Displays the current model name with emoji. Shows effort level for Opus/Sonnet/Fable (MAX/X/H/M/L) and fast mode indicator for Opus (↯). The live `effort.level` / `fast_mode` fields Claude Code sends on stdin win, so mid-session `/effort` changes and session-only picks are reflected; older Claude Code versions without them fall back to `settings.json`. |
+| **Description** | Displays the current model name and version with emoji. The version is read from `display_name` (`Opus 5 (1M context)` → `Opus 5`); names without one show the family only. Shows effort level for Opus/Sonnet/Fable (MAX/X/H/M/L) and fast mode indicator for Opus (↯). The live `effort.level` / `fast_mode` fields Claude Code sends on stdin win, so mid-session `/effort` changes and session-only picks are reflected; older Claude Code versions without them fall back to `settings.json`. |
 
 **Example output:**
 ```
-Opus(X)
-Sonnet(M)
-Opus(X) ↯
+◆ Opus 5.5(X)
+◆ Sonnet 5(M)
+◆ Opus 5.5(X) ↯
+◆ Haiku 4.5
 ```
 
 ### context
@@ -279,13 +280,13 @@ Agent: 3 done
 | Property | Value |
 |----------|-------|
 | **Widget ID** | `burnRate` |
-| **Data Source** | stdin (tokens) + session duration |
-| **Description** | Calculates and displays the token consumption rate per minute based on session average. |
+| **Data Source** | transcript (per-request usage + first entry time) |
+| **Description** | Session-average token consumption per minute: input + cache write + output tokens of every main-conversation request, summed from the transcript, over the time since the transcript's first entry (idle time and resumed sessions included, so the figure stays consistent however late the widget is enabled). Cache reads are excluded — they re-read the whole prompt prefix on every call, so counting them tracks context size rather than spend. Subagent requests are not included. Shows `0/min` at session start. |
 
 **Example output:**
 ```
-5K/m
-12K/m
+🔥 5K/min
+🔥 12K/min
 ```
 
 ### tokenSpeed
@@ -293,13 +294,26 @@ Agent: 3 done
 | Property | Value |
 |----------|-------|
 | **Widget ID** | `tokenSpeed` |
-| **Data Source** | stdin (output tokens + timing) |
-| **Description** | Shows the output token generation speed in tokens per second. |
+| **Data Source** | transcript (output tokens + turn timing) |
+| **Description** | Session-average output speed: the main conversation's output tokens over the summed wall-clock span of its requests (each measured from the triggering prompt or tool result, so time-to-first-token is included). Subagent calls are excluded. Moves slowly in a long session — use `tokenSpeedLast` for the latest response. Hidden until a request has been measured. |
 
 **Example output:**
 ```
 ⚡ 67 tok/s
 ⚡ 120 tok/s
+```
+
+### tokenSpeedLast
+
+| Property | Value |
+|----------|-------|
+| **Widget ID** | `tokenSpeedLast` |
+| **Data Source** | transcript (output tokens + turn timing) |
+| **Description** | Output speed of the most recent response alone, measured the same way as `tokenSpeed`. Labelled so it can sit next to `tokenSpeed`. Short responses (e.g. a lone tool call) read low because time-to-first-token dominates their span — that is the real end-to-end rate of that request, not a parsing error. Hidden until a response has both output and a measurable span. |
+
+**Example output:**
+```
+⚡ last 150 tok/s
 ```
 
 ### cacheHit

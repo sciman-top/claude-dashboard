@@ -62,7 +62,7 @@ Multi-provider support: z.ai/ZHIPU, Codex, Gemini, Antigravity auto-detected whe
 
 | Category | Widget | Description |
 |----------|--------|-------------|
-| **Core** | `model` | Model name with emoji, effort level for Opus/Sonnet/Fable (MAX/X/H/M/L), fast mode for Opus (↯). Reads the live `effort.level` / `fast_mode` from stdin, falling back to `settings.json` on older Claude Code |
+| **Core** | `model` | Model name and version with emoji (e.g. `Opus 5.5`), effort level for Opus/Sonnet/Fable (MAX/X/H/M/L), fast mode for Opus (↯). Reads the live `effort.level` / `fast_mode` from stdin, falling back to `settings.json` on older Claude Code |
 | | `context` | Progress bar, percentage, tokens (🟢 0-50% / 🟡 51-80% / 🔴 81-100%) |
 | | `contextBar` | Progress bar only (sub-widget of `context`) |
 | | `contextPercentage` | Percentage only (sub-widget of `context`) |
@@ -82,7 +82,7 @@ Multi-provider support: z.ai/ZHIPU, Codex, Gemini, Antigravity auto-detected whe
 | **Activity** | `toolActivity` | Running/completed tools with targets (e.g., `Read(app.ts)`) |
 | | `agentStatus` | Subagent progress with resolved model, e.g. `Explore(Opus)` (from the Agent tool's `model` param or `CLAUDE_CODE_SUBAGENT_MODEL`) |
 | | `todoProgress` | Todo completion rate |
-| **Analytics** | `burnRate` | Token consumption per minute |
+| **Analytics** | `burnRate` | Token consumption per minute, session average (input + cache write + output) |
 | | `cacheHit` | Cache hit rate percentage (last request) |
 | | `promptCache` | Session prompt-cache health: ♨️ warm with time left before it goes cold / ❄️ cold, hit ratio, miss count, e.g. `♨️ 4m 91% miss 2` (from `prompt_cache`, Claude Code ≥ 2.1.251). The warm→cold switch happens on its own; set `statusLine.refreshInterval` (e.g. `60`) to keep the minute countdown ticking while idle |
 | | `promptCacheState` | Warm/cold icon + time left only, e.g. `♨️ 4m` (sub-widget of `promptCache`) |
@@ -99,7 +99,8 @@ Multi-provider support: z.ai/ZHIPU, Codex, Gemini, Antigravity auto-detected whe
 | | `performance` | Composite efficiency badge (cache hit + output ratio) |
 | | `forecast` | Estimated hourly cost based on session rate |
 | | `budget` | Daily spending vs configured budget limit⁵ |
-| | `tokenSpeed` | Output token generation speed (tok/s) |
+| | `tokenSpeed` | Output token generation speed (tok/s), session average |
+| | `tokenSpeedLast` | Output token generation speed of the most recent response only |
 | | `todayCost` | Total spending across all sessions today |
 | **Status** | `peakHours` | Peak hours indicator with countdown ([based on PeakClaude](https://github.com/pforret/PeakClaude))⁶ |
 | | `tagStatus` | Commits ahead of matched git tags (default pattern `v*`, customize via `tagPatterns`)⁷ |

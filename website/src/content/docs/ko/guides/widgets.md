@@ -5,13 +5,13 @@ sidebar:
   order: 2
 ---
 
-claude-dashboard는 40개의 위젯을 제공합니다. 각 위젯은 독립적으로 데이터를 가져오고 렌더링하며, 데이터를 가져올 수 없는 경우 자동으로 숨겨집니다.
+claude-dashboard는 49개의 위젯을 제공합니다. 각 위젯은 독립적으로 데이터를 가져오고 렌더링하며, 데이터를 가져올 수 없는 경우 자동으로 숨겨집니다.
 
 ## Core
 
 | 위젯 | ID | 설명 |
 |------|-----|------|
-| 모델 | `model` | 모델 이름과 이모지, Opus/Sonnet/Fable effort 수준(MAX/X/H/M/L), Opus 빠른 모드(↯) |
+| 모델 | `model` | 모델 이름·버전과 이모지(예: `Opus 5.5`), Opus/Sonnet/Fable effort 수준(MAX/X/H/M/L), Opus 빠른 모드(↯) |
 | 컨텍스트 | `context` | 프로그레스 바, 백분율, 토큰 수 (🟢 0-50% / 🟡 51-80% / 🔴 81-100%) |
 | 컨텍스트 바 | `contextBar` | 프로그레스 바만 (`context`의 서브 위젯) |
 | 컨텍스트 백분율 | `contextPercentage` | 백분율만 (`context`의 서브 위젯) |
@@ -51,8 +51,9 @@ claude-dashboard는 40개의 위젯을 제공합니다. 각 위젯은 독립적�
 
 | 위젯 | ID | 설명 |
 |------|-----|------|
-| 번 레이트 | `burnRate` | 분당 토큰 소비량 |
-| 토큰 속도 | `tokenSpeed` | 출력 토큰 생성 속도 |
+| 번 레이트 | `burnRate` | 분당 토큰 소비량, 세션 평균 (input + cache write + output) |
+| 토큰 속도 | `tokenSpeed` | 출력 토큰 생성 속도 (세션 평균) |
+| 최근 응답 속도 | `tokenSpeedLast` | 가장 최근 응답 하나의 출력 토큰 생성 속도 |
 | 캐시 히트율 | `cacheHit` | 캐시 히트율 백분율 (마지막 요청 기준) |
 | 프롬프트 캐시 | `promptCache` | 세션 프롬프트 캐시 상태: ♨️ warm + 만료까지 남은 시간 / ❄️ cold, 히트율, 미스 횟수 (Claude Code 2.1.251 이상) |
 | 프롬프트 캐시 상태 | `promptCacheState` | warm/cold 아이콘 + 남은 시간만 (`promptCache`의 서브 위젯) |
