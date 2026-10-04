@@ -21,6 +21,9 @@ The configuration file is located at `~/.claude/claude-dashboard.local.json`. Th
 | `preset` | `string` | -- | Preset shorthand string for quick layout. When set, overrides `displayMode` with `"custom"` and generates `lines` from the string. |
 | `dailyBudget` | `number` | -- | Daily budget limit in USD. Enables the `budget` widget. |
 | `tagPatterns` | `string[]` | `["v*"]` | Glob patterns for the `tagStatus` widget. Each pattern resolves to at most one tag (the most recent reachable from HEAD). Widget hides when no pattern matches a tag. |
+| `modPane` | `DisplayMode \| string` | `"detailed"` | Layout of the `/dashboard` pane: a display mode name (`compact`/`normal`/`detailed`) or a preset string like `"MC$R|BDO"`. |
+| `modBand` | `DisplayMode \| string` | status line layout | Layout of the `/dashboard-band` band. Same format as `modPane`. |
+| `modBandDefault` | `boolean` | `false` | Turn the band on at session start. |
 | `cache` | `{ ttlSeconds: number }` | `{ ttlSeconds: 300 }` | Cache settings. `ttlSeconds` controls how long API responses are cached. |
 
 ## DisplayMode
