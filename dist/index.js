@@ -4934,7 +4934,7 @@ async function formatOutput(ctx) {
 }
 
 // scripts/utils/render-mode.ts
-var MOD_UNAVAILABLE_WIDGETS = ["cacheHit", "tokenBreakdown", "performance"];
+var MOD_UNAVAILABLE_WIDGETS = ["cacheHit"];
 var SURFACES = ["pane", "band"];
 var NAMED_MODES = ["compact", "normal", "detailed"];
 function resolveRenderMode(env) {
@@ -4980,9 +4980,6 @@ async function markBand(sessionId, dir = FILE_CACHE_DIR) {
   await mkdir5(dir, { recursive: true });
   await writeFile5(file, String(Date.now()));
 }
-function isMissing(err) {
-  return err?.code === "ENOENT";
-}
 async function clearBand(sessionId, dir = FILE_CACHE_DIR) {
   const file = bandMarkerPath(sessionId, dir);
   if (!file)
@@ -4990,7 +4987,7 @@ async function clearBand(sessionId, dir = FILE_CACHE_DIR) {
   try {
     await unlink3(file);
   } catch (err) {
-    if (!isMissing(err))
+    if (!isErrnoException(err, "ENOENT"))
       throw err;
   }
 }
@@ -5002,7 +4999,7 @@ async function isBandActive(sessionId, now = Date.now(), dir = FILE_CACHE_DIR) {
     const { mtimeMs } = await stat11(file);
     return now - mtimeMs < BAND_MARKER_TTL_MS;
   } catch (err) {
-    if (isMissing(err))
+    if (isErrnoException(err, "ENOENT"))
       return false;
     throw err;
   }

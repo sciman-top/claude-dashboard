@@ -1,6 +1,7 @@
 /**
  * Builds the statusLine-shaped stdin JSON from what the mod API exposes, so the mod can run
  * the unchanged renderer (dist/index.js). Pure and Node-free: bundled into dist/mod.js.
+ * @handbook 9.1-mod-renderer-subprocess
  * @tested scripts/__tests__/mod-stdin-builder.test.ts
  */
 import type { StdinInput } from '../types.js';

@@ -4,6 +4,8 @@
  * or above the prompt (/dashboard-band), where it stands in for this session's statusLine.
  * Exported as a function declaration: the engine's validator reads the built dist/mod.js
  * literally and refuses `var register = …`, which an arrow export compiles to.
+ * @handbook 9.1-mod-renderer-subprocess
+ * @handbook 9.3-engine-validator-constraints
  */
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
@@ -74,16 +76,22 @@ async function canDrawBand($: EngineInterface): Promise<boolean> {
   return surfaces.some(s => BAND_SURFACES.has(s))
 }
 
+async function refreshPane($: EngineInterface) {
+  if (!isPaneOpen) return
+  const lines = await renderLines($, { CLAUDE_DASHBOARD_SURFACE: 'pane' })
+  await update($, paneLines, keepOrWarn(lines))
+}
+
+// Every band render refreshes the session's marker: the heartbeat that hides statusLine.
+async function refreshBand($: EngineInterface) {
+  if (!isBandOn || !(await canDrawBand($))) return
+  const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId })
+  await update($, bandLines, keepOrWarn(lines))
+}
+
+// Pane and band are separate renderer runs; run them side by side.
 async function refresh($: EngineInterface) {
-  if (isPaneOpen) {
-    const lines = await renderLines($, { CLAUDE_DASHBOARD_SURFACE: 'pane' })
-    await update($, paneLines, keepOrWarn(lines))
-  }
-  // Every band render refreshes the session's marker: the heartbeat that hides statusLine.
-  if (isBandOn && (await canDrawBand($))) {
-    const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId })
-    await update($, bandLines, keepOrWarn(lines))
-  }
+  await Promise.all([refreshPane($), refreshBand($)])
 }
 
 // Settings live in the dashboard config, which only the Node renderer reads.
@@ -146,12 +154,17 @@ function drawLines(Box: any, Text: any, lines: Segment[][]) {
 export function register(on: Parameters<Register>[0]) {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'dashboard', description: 'Toggle the claude-dashboard pane' })
-    snapshot.sessionId = await $.session.id()
-    snapshot.model = await $.session.model()
-    snapshot.cwd = await $.session.cwd()
-    snapshot.root = await $.session.root()
-    snapshot.version = (await $.session.version()).version
-    applyUsage(await $.session.usage())
+    // session.start is awaited before the first prompt: fetch the independent reads together.
+    const [id, model, cwd, root, version, usage] = await Promise.all([
+      $.session.id(),
+      $.session.model(),
+      $.session.cwd(),
+      $.session.root(),
+      $.session.version(),
+      $.session.usage(),
+    ])
+    Object.assign(snapshot, { sessionId: id, model, cwd, root, version: version.version })
+    applyUsage(usage)
     await $.command.register({
       name: 'dashboard-band',
       description: 'Show the dashboard above the prompt instead of the statusLine (on|off)',

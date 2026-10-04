@@ -3,6 +3,7 @@
  * The engine refuses a whole tree when any text holds an escape character, so every escape
  * is consumed here; colours become hex (#rrggbb), the one format every surface renders
  * (`ansi256(n)` strings are not). Pure and Node-free: bundled into dist/mod.js.
+ * @handbook 9.2-ansi-to-text
  * @tested scripts/__tests__/mod-ansi.test.ts
  */
 export interface Segment {

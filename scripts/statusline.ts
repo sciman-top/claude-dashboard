@@ -6,6 +6,8 @@
  * @handbook 2.2-import-order
  * @handbook 4.6-config-caching
  * @handbook 6.1-hierarchical-defense
+ * @handbook 9.4-render-mode-env
+ * @tested scripts/__tests__/statusline-mod-env.test.ts
  */
 
 import { readFile, stat } from 'fs/promises';

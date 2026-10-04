@@ -17,7 +17,7 @@ const CLEANUP_INTERVAL_MS = 3600000; // 1 hour - minimum interval between cleanu
 /**
  * Type guard to check if an error is an ErrnoException with a specific code
  */
-function isErrnoException(error: unknown, code: string): boolean {
+export function isErrnoException(error: unknown, code: string): boolean {
   return (
     error instanceof Error &&
     'code' in error &&

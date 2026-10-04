@@ -2,11 +2,13 @@
  * Per-session heartbeat marker that hides the statusLine while the mod band is drawing it.
  * Expires on its own (TTL) so a crashed or unloaded mod never leaves statusLine hidden;
  * settings.json is never modified.
+ * @handbook 4.9-band-marker-heartbeat
  * @tested scripts/__tests__/band-marker.test.ts
  */
 import { mkdir, writeFile, unlink, stat } from 'fs/promises';
 import path from 'path';
 import { FILE_CACHE_DIR } from './file-cache.js';
+import { isErrnoException } from './session.js';
 
 export const BAND_MARKER_TTL_MS = 180_000;
 
@@ -26,17 +28,13 @@ export async function markBand(sessionId: string, dir: string = FILE_CACHE_DIR):
   await writeFile(file, String(Date.now()));
 }
 
-function isMissing(err: unknown): boolean {
-  return (err as NodeJS.ErrnoException)?.code === 'ENOENT';
-}
-
 export async function clearBand(sessionId: string, dir: string = FILE_CACHE_DIR): Promise<void> {
   const file = bandMarkerPath(sessionId, dir);
   if (!file) return;
   try {
     await unlink(file);
   } catch (err) {
-    if (!isMissing(err)) throw err;
+    if (!isErrnoException(err, 'ENOENT')) throw err;
   }
 }
 
@@ -51,7 +49,7 @@ export async function isBandActive(
     const { mtimeMs } = await stat(file);
     return now - mtimeMs < BAND_MARKER_TTL_MS;
   } catch (err) {
-    if (isMissing(err)) return false;
+    if (isErrnoException(err, 'ENOENT')) return false;
     throw err;
   }
 }

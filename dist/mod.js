@@ -319,15 +319,20 @@ async function canDrawBand($) {
   const surfaces = await $.session.surfaces();
   return surfaces.some((s) => BAND_SURFACES.has(s));
 }
+async function refreshPane($) {
+  if (!isPaneOpen)
+    return;
+  const lines = await renderLines($, { CLAUDE_DASHBOARD_SURFACE: "pane" });
+  await update($, paneLines, keepOrWarn(lines));
+}
+async function refreshBand($) {
+  if (!isBandOn || !await canDrawBand($))
+    return;
+  const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId });
+  await update($, bandLines, keepOrWarn(lines));
+}
 async function refresh($) {
-  if (isPaneOpen) {
-    const lines = await renderLines($, { CLAUDE_DASHBOARD_SURFACE: "pane" });
-    await update($, paneLines, keepOrWarn(lines));
-  }
-  if (isBandOn && await canDrawBand($)) {
-    const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId });
-    await update($, bandLines, keepOrWarn(lines));
-  }
+  await Promise.all([refreshPane($), refreshBand($)]);
 }
 async function bandDefault($) {
   try {
@@ -372,12 +377,16 @@ function drawLines(Box, Text, lines) {
 function register(on) {
   on("session.start", async ($, e, next) => {
     await $.command.register({ name: "dashboard", description: "Toggle the claude-dashboard pane" });
-    snapshot.sessionId = await $.session.id();
-    snapshot.model = await $.session.model();
-    snapshot.cwd = await $.session.cwd();
-    snapshot.root = await $.session.root();
-    snapshot.version = (await $.session.version()).version;
-    applyUsage(await $.session.usage());
+    const [id, model, cwd, root, version, usage] = await Promise.all([
+      $.session.id(),
+      $.session.model(),
+      $.session.cwd(),
+      $.session.root(),
+      $.session.version(),
+      $.session.usage()
+    ]);
+    Object.assign(snapshot, { sessionId: id, model, cwd, root, version: version.version });
+    applyUsage(usage);
     await $.command.register({
       name: "dashboard-band",
       description: "Show the dashboard above the prompt instead of the statusLine (on|off)"
