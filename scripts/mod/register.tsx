@@ -1,11 +1,12 @@
 /**
  * claude-dashboard mod: runs the unchanged renderer (dist/index.js) as a subprocess with a
- * statusLine-shaped stdin built from mod data, and draws its lines in a Pane.
+ * statusLine-shaped stdin built from mod data, and draws its lines in a Pane (/dashboard)
+ * or above the prompt (/dashboard-band), where it stands in for this session's statusLine.
  * Exported as a function declaration: the engine's validator reads the built dist/mod.js
  * literally and refuses `var register = …`, which an arrow export compiles to.
  */
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import en from '../../locales/en.json'
 import ko from '../../locales/ko.json'
@@ -17,6 +18,10 @@ const TICK_MS = 60_000
 const RUN_TIMEOUT_MS = 5_000
 
 const paneLines = atom({ plugin: 'claude-dashboard', key: 'paneLines' } as const, [] as Segment[][])
+const bandLines = atom({ plugin: 'claude-dashboard', key: 'bandLines' } as const, [] as Segment[][])
+const BAND_STORE_KEY = 'bandEnabled'
+// The band only draws here; elsewhere no heartbeat is sent, so statusLine stays.
+const BAND_SURFACES: ReadonlySet<string> = new Set(['terminal', 'desktop'])
 
 type Strings = typeof en.mod
 
@@ -38,7 +43,8 @@ interface Usage {
 // Module state: a reload re-runs register and session.start, so starting over is fine.
 const snapshot: ModSnapshot = { sessionId: '', model: '', cwd: '', rateLimits: [] }
 let isPaneOpen = false
-let stopTicker: (() => void) | null = null
+let isBandOn = false
+let ticker: Timer | null = null
 
 // Helpers that take $ are top-level declarations: the engine's validator follows $ only into those.
 async function renderLines($: EngineInterface, env: Record<string, string>): Promise<Segment[][] | null> {
@@ -64,19 +70,41 @@ function keepOrWarn(lines: Segment[][] | null) {
   return (prev: Segment[][]) => lines ?? (prev.length > 0 ? prev : [[{ text: `⚠️ ${strings().renderFailed}` }]])
 }
 
+async function canDrawBand($: EngineInterface): Promise<boolean> {
+  const surfaces = await $.session.surfaces()
+  return surfaces.some(s => BAND_SURFACES.has(s))
+}
+
 async function refresh($: EngineInterface) {
   if (isPaneOpen) {
     const lines = await renderLines($, { CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' })
     await update($, paneLines, keepOrWarn(lines))
   }
+  // Every band render refreshes the session's marker: the heartbeat that hides statusLine.
+  if (isBandOn && (await canDrawBand($))) {
+    const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId })
+    await update($, bandLines, keepOrWarn(lines))
+  }
+}
+
+async function setBand($: EngineInterface, on: boolean) {
+  isBandOn = on
+  await $.store.set(BAND_STORE_KEY, on)
+  syncTicker($)
+  if (on) {
+    await refresh($)
+  } else {
+    await update($, bandLines, () => [])
+    await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId })
+  }
 }
 
 function syncTicker($: EngineInterface) {
-  const needed = isPaneOpen
-  if (needed && !stopTicker) stopTicker = $.clock.every(TICK_MS, () => void refresh($))
-  if (!needed && stopTicker) {
-    stopTicker()
-    stopTicker = null
+  const needed = isPaneOpen || isBandOn
+  if (needed && !ticker) ticker = $.clock.every(TICK_MS, () => void refresh($))
+  if (!needed && ticker) {
+    ticker.cancel()
+    ticker = null
   }
 }
 
@@ -84,6 +112,22 @@ function applyUsage(u: Usage) {
   snapshot.context = { tokens: u.context.tokens, window: u.context.window, percent: u.context.percent }
   snapshot.rateLimits = [...u.rateLimits]
   snapshot.costUsd = u.cost?.usd
+}
+
+// Box/Text come from $.ui.resolve(e): each surface has its own element table.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawLines(Box: any, Text: any, lines: Segment[][]) {
+  return (
+    <Box flexDirection="column">
+      {lines.map(line => (
+        <Text>
+          {line.map(seg => (
+            <Text color={seg.color} bold={seg.bold} dimColor={seg.dim}>{seg.text}</Text>
+          ))}
+        </Text>
+      ))}
+    </Box>
+  )
 }
 
 export function register(on: Parameters<Register>[0]) {
@@ -95,6 +139,11 @@ export function register(on: Parameters<Register>[0]) {
     snapshot.root = await $.session.root()
     snapshot.version = (await $.session.version()).version
     applyUsage(await $.session.usage())
+    await $.command.register({
+      name: 'dashboard-band',
+      description: 'Show the dashboard above the prompt instead of the statusLine (on|off)',
+    })
+    if ((await $.store.get(BAND_STORE_KEY)) === true) await setBand($, true)
     return next(e)
   })
 
@@ -130,19 +179,29 @@ export function register(on: Parameters<Register>[0]) {
     return next(e)
   })
 
+  on('command.run', { command: 'dashboard-band' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg !== 'on' && arg !== 'off') return { text: strings().bandUsage }
+    await setBand($, arg === 'on')
+    return { text: arg === 'on' ? strings().bandOn : strings().bandOff }
+  })
+
   on('ui.render', { component: 'Pane', requestId: 'claude-dashboard' }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
-    const lines = await read($, paneLines)
-    return (
-      <Box flexDirection="column">
-        {lines.map(line => (
-          <Text>
-            {line.map(seg => (
-              <Text color={seg.color} bold={seg.bold} dimColor={seg.dim}>{seg.text}</Text>
-            ))}
-          </Text>
-        ))}
-      </Box>
-    )
+    return drawLines(Box, Text, await read($, paneLines))
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (!isBandOn || !BAND_SURFACES.has(e.surface) || e.props.hasSurvey) return next(e)
+    const lines = await read($, bandLines)
+    if (lines.length === 0) return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    return drawLines(Box, Text, lines)
+  })
+
+  on('session.end', async ($, e, next) => {
+    // Give statusLine back now rather than after the marker TTL; bandEnabled stays in $.store.
+    if (isBandOn) await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId })
+    return next(e)
   })
 }

@@ -282,6 +282,9 @@ var PANE = "claude-dashboard";
 var TICK_MS = 6e4;
 var RUN_TIMEOUT_MS = 5e3;
 var paneLines = atom({ plugin: "claude-dashboard", key: "paneLines" }, []);
+var bandLines = atom({ plugin: "claude-dashboard", key: "bandLines" }, []);
+var BAND_STORE_KEY = "bandEnabled";
+var BAND_SURFACES = /* @__PURE__ */ new Set(["terminal", "desktop"]);
 function strings() {
   try {
     return (Intl.DateTimeFormat().resolvedOptions().locale.startsWith("ko") ? ko_default : en_default).mod;
@@ -291,7 +294,8 @@ function strings() {
 }
 var snapshot = { sessionId: "", model: "", cwd: "", rateLimits: [] };
 var isPaneOpen = false;
-var stopTicker = null;
+var isBandOn = false;
+var ticker = null;
 async function renderLines($, env) {
   try {
     const run = await $.process.run(["node", `${$.plugin.root}/dist/index.js`], {
@@ -312,25 +316,47 @@ async function renderLines($, env) {
 function keepOrWarn(lines) {
   return (prev) => lines ?? (prev.length > 0 ? prev : [[{ text: `\u26A0\uFE0F ${strings().renderFailed}` }]]);
 }
+async function canDrawBand($) {
+  const surfaces = await $.session.surfaces();
+  return surfaces.some((s) => BAND_SURFACES.has(s));
+}
 async function refresh($) {
   if (isPaneOpen) {
     const lines = await renderLines($, { CLAUDE_DASHBOARD_DISPLAY_MODE: "detailed" });
     await update($, paneLines, keepOrWarn(lines));
   }
+  if (isBandOn && await canDrawBand($)) {
+    const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId });
+    await update($, bandLines, keepOrWarn(lines));
+  }
+}
+async function setBand($, on) {
+  isBandOn = on;
+  await $.store.set(BAND_STORE_KEY, on);
+  syncTicker($);
+  if (on) {
+    await refresh($);
+  } else {
+    await update($, bandLines, () => []);
+    await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId });
+  }
 }
 function syncTicker($) {
-  const needed = isPaneOpen;
-  if (needed && !stopTicker)
-    stopTicker = $.clock.every(TICK_MS, () => void refresh($));
-  if (!needed && stopTicker) {
-    stopTicker();
-    stopTicker = null;
+  const needed = isPaneOpen || isBandOn;
+  if (needed && !ticker)
+    ticker = $.clock.every(TICK_MS, () => void refresh($));
+  if (!needed && ticker) {
+    ticker.cancel();
+    ticker = null;
   }
 }
 function applyUsage(u) {
   snapshot.context = { tokens: u.context.tokens, window: u.context.window, percent: u.context.percent };
   snapshot.rateLimits = [...u.rateLimits];
   snapshot.costUsd = u.cost?.usd;
+}
+function drawLines(Box, Text, lines) {
+  return /* @__PURE__ */ h(Box, { flexDirection: "column" }, lines.map((line) => /* @__PURE__ */ h(Text, null, line.map((seg) => /* @__PURE__ */ h(Text, { color: seg.color, bold: seg.bold, dimColor: seg.dim }, seg.text)))));
 }
 function register(on) {
   on("session.start", async ($, e, next) => {
@@ -341,6 +367,12 @@ function register(on) {
     snapshot.root = await $.session.root();
     snapshot.version = (await $.session.version()).version;
     applyUsage(await $.session.usage());
+    await $.command.register({
+      name: "dashboard-band",
+      description: "Show the dashboard above the prompt instead of the statusLine (on|off)"
+    });
+    if (await $.store.get(BAND_STORE_KEY) === true)
+      await setBand($, true);
     return next(e);
   });
   on("classic.SessionStart", ($, e, next) => {
@@ -372,10 +404,30 @@ function register(on) {
     syncTicker($);
     return next(e);
   });
+  on("command.run", { command: "dashboard-band" }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase();
+    if (arg !== "on" && arg !== "off")
+      return { text: strings().bandUsage };
+    await setBand($, arg === "on");
+    return { text: arg === "on" ? strings().bandOn : strings().bandOff };
+  });
   on("ui.render", { component: "Pane", requestId: "claude-dashboard" }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e);
-    const lines = await read($, paneLines);
-    return /* @__PURE__ */ h(Box, { flexDirection: "column" }, lines.map((line) => /* @__PURE__ */ h(Text, null, line.map((seg) => /* @__PURE__ */ h(Text, { color: seg.color, bold: seg.bold, dimColor: seg.dim }, seg.text)))));
+    return drawLines(Box, Text, await read($, paneLines));
+  });
+  on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
+    if (!isBandOn || !BAND_SURFACES.has(e.surface) || e.props.hasSurvey)
+      return next(e);
+    const lines = await read($, bandLines);
+    if (lines.length === 0)
+      return next(e);
+    const { Box, Text } = $.ui.resolve(e);
+    return drawLines(Box, Text, lines);
+  });
+  on("session.end", async ($, e, next) => {
+    if (isBandOn)
+      await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId });
+    return next(e);
   });
 }
 export {
