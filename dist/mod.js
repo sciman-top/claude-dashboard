@@ -294,6 +294,7 @@ function strings() {
 var snapshot = { sessionId: "", model: "", cwd: "", rateLimits: [] };
 var isPaneOpen = false;
 var isBandOn = false;
+var bandRuns = /* @__PURE__ */ new Set();
 var ticker = null;
 async function renderLines($, env) {
   try {
@@ -325,11 +326,27 @@ async function refreshPane($) {
   const lines = await renderLines($, { CLAUDE_DASHBOARD_SURFACE: "pane" });
   await update($, paneLines, keepOrWarn(lines));
 }
+async function runBand($) {
+  const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId });
+  await update($, bandLines, keepOrWarn(lines));
+}
 async function refreshBand($) {
   if (!isBandOn || !await canDrawBand($))
     return;
-  const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId });
-  await update($, bandLines, keepOrWarn(lines));
+  if (!isBandOn)
+    return;
+  const run = runBand($);
+  bandRuns.add(run);
+  try {
+    await run;
+  } finally {
+    bandRuns.delete(run);
+  }
+}
+async function stopBand($) {
+  isBandOn = false;
+  await Promise.allSettled([...bandRuns]);
+  await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId });
 }
 async function refresh($) {
   await Promise.all([refreshPane($), refreshBand($)]);
@@ -348,13 +365,14 @@ async function bandDefault($) {
   }
 }
 async function setBand($, on) {
-  isBandOn = on;
-  syncTicker($);
   if (on) {
+    isBandOn = true;
+    syncTicker($);
     await refresh($);
   } else {
+    await stopBand($);
+    syncTicker($);
     await update($, bandLines, () => []);
-    await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId });
   }
 }
 function syncTicker($) {
@@ -446,7 +464,7 @@ function register(on) {
   });
   on("session.end", async ($, e, next) => {
     if (isBandOn)
-      await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId });
+      await stopBand($);
     return next(e);
   });
 }

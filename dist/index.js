@@ -4999,9 +4999,9 @@ async function isBandActive(sessionId, now = Date.now(), dir = FILE_CACHE_DIR) {
     const { mtimeMs } = await stat11(file);
     return now - mtimeMs < BAND_MARKER_TTL_MS;
   } catch (err) {
-    if (isErrnoException(err, "ENOENT"))
-      return false;
-    throw err;
+    if (!isErrnoException(err, "ENOENT"))
+      debugLog("band-marker", "stat failed", err);
+    return false;
   }
 }
 

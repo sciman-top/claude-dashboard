@@ -2,7 +2,7 @@
  * @covers scripts/utils/band-marker.ts
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readdirSync, utimesSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, utimesSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import {
@@ -36,6 +36,12 @@ describe('band marker', () => {
   it('is inactive when no marker exists and clear is a no-op', async () => {
     expect(await isBandActive('nope', Date.now(), dir)).toBe(false);
     await expect(clearBand('nope', dir)).resolves.toBeUndefined();
+  });
+
+  it('treats an unreadable cache dir as inactive instead of failing the statusLine', async () => {
+    const notADir = path.join(dir, 'file');
+    writeFileSync(notADir, '');
+    await expect(isBandActive('abc', Date.now(), notADir)).resolves.toBe(false);
   });
 
   it.each(['', '../x', 'a/b', 'a\\b', 'x'.repeat(129)])(

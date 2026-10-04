@@ -9,6 +9,7 @@ import { mkdir, writeFile, unlink, stat } from 'fs/promises';
 import path from 'path';
 import { FILE_CACHE_DIR } from './file-cache.js';
 import { isErrnoException } from './session.js';
+import { debugLog } from './debug.js';
 
 export const BAND_MARKER_TTL_MS = 180_000;
 
@@ -49,7 +50,9 @@ export async function isBandActive(
     const { mtimeMs } = await stat(file);
     return now - mtimeMs < BAND_MARKER_TTL_MS;
   } catch (err) {
-    if (isErrnoException(err, 'ENOENT')) return false;
-    throw err;
+    // Runs on every statusLine render, mod or not: an odd cache dir (EACCES, ENOTDIR) must
+    // fall back to drawing the statusLine, never fail it.
+    if (!isErrnoException(err, 'ENOENT')) debugLog('band-marker', 'stat failed', err);
+    return false;
   }
 }

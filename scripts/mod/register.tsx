@@ -45,6 +45,8 @@ interface Usage {
 const snapshot: ModSnapshot = { sessionId: '', model: '', cwd: '', rateLimits: [] }
 let isPaneOpen = false
 let isBandOn = false
+// Band runs re-mark the session when they finish; off must wait for them before clearing.
+const bandRuns = new Set<Promise<void>>()
 let ticker: Timer | null = null
 
 // Helpers that take $ are top-level declarations: the engine's validator follows $ only into those.
@@ -82,11 +84,30 @@ async function refreshPane($: EngineInterface) {
   await update($, paneLines, keepOrWarn(lines))
 }
 
+async function runBand($: EngineInterface) {
+  const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId })
+  await update($, bandLines, keepOrWarn(lines))
+}
+
 // Every band render refreshes the session's marker: the heartbeat that hides statusLine.
 async function refreshBand($: EngineInterface) {
   if (!isBandOn || !(await canDrawBand($))) return
-  const lines = await renderLines($, { CLAUDE_DASHBOARD_BAND_SESSION: snapshot.sessionId })
-  await update($, bandLines, keepOrWarn(lines))
+  // Off may have landed while surfaces() was in flight; a run now would re-mark the session.
+  if (!isBandOn) return
+  const run = runBand($)
+  bandRuns.add(run)
+  try {
+    await run
+  } finally {
+    bandRuns.delete(run)
+  }
+}
+
+// Hand statusLine back: stop new band runs, let started ones finish, then drop the marker.
+async function stopBand($: EngineInterface) {
+  isBandOn = false
+  await Promise.allSettled([...bandRuns])
+  await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId })
 }
 
 // Pane and band are separate renderer runs; run them side by side.
@@ -110,13 +131,14 @@ async function bandDefault($: EngineInterface): Promise<boolean> {
 }
 
 async function setBand($: EngineInterface, on: boolean) {
-  isBandOn = on
-  syncTicker($)
   if (on) {
+    isBandOn = true
+    syncTicker($)
     await refresh($)
   } else {
+    await stopBand($)
+    syncTicker($)
     await update($, bandLines, () => [])
-    await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId })
   }
 }
 
@@ -227,7 +249,7 @@ export function register(on: Parameters<Register>[0]) {
 
   on('session.end', async ($, e, next) => {
     // Give statusLine back now rather than after the marker TTL.
-    if (isBandOn) await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId })
+    if (isBandOn) await stopBand($)
     return next(e)
   })
 }
