@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/statusline.ts
-import { readFile as readFile11, stat as stat11 } from "fs/promises";
+import { readFile as readFile11, stat as stat12 } from "fs/promises";
 import { join as join8 } from "path";
 import { homedir as homedir4 } from "os";
 
@@ -1659,9 +1659,9 @@ async function countFiles(dir, pattern) {
     return 0;
   }
 }
-async function fileExists(path5) {
+async function fileExists(path6) {
   try {
-    await stat4(path5);
+    await stat4(path6);
     return true;
   } catch {
     return false;
@@ -1690,9 +1690,9 @@ async function countMcps(projectDir) {
     { path: join4(homeDir, ".config", "claude-code", "mcp.json"), key: "mcpServers" }
   ];
   const counts = await Promise.all(
-    mcpPaths.map(async ({ path: path5, key }) => {
+    mcpPaths.map(async ({ path: path6, key }) => {
       try {
-        const content = await readFile4(path5, "utf-8");
+        const content = await readFile4(path6, "utf-8");
         const config = JSON.parse(content);
         return Object.keys(config[key] || {}).length;
       } catch {
@@ -4914,6 +4914,68 @@ async function formatOutput(ctx) {
   return lines.join("\n");
 }
 
+// scripts/utils/render-mode.ts
+var MOD_DISPLAY_MODES = ["compact", "normal", "detailed"];
+function resolveRenderMode(env) {
+  if (env.CLAUDE_DASHBOARD_MOD !== "1")
+    return { fromMod: false };
+  if (env.CLAUDE_DASHBOARD_BAND_OFF) {
+    return { fromMod: true, clearSession: env.CLAUDE_DASHBOARD_BAND_OFF };
+  }
+  const mode = { fromMod: true };
+  const requested = env.CLAUDE_DASHBOARD_DISPLAY_MODE;
+  if (requested && MOD_DISPLAY_MODES.includes(requested))
+    mode.displayMode = requested;
+  if (env.CLAUDE_DASHBOARD_BAND_SESSION)
+    mode.markSession = env.CLAUDE_DASHBOARD_BAND_SESSION;
+  return mode;
+}
+
+// scripts/utils/band-marker.ts
+import { mkdir as mkdir5, writeFile as writeFile5, unlink as unlink3, stat as stat11 } from "fs/promises";
+import path5 from "path";
+var BAND_MARKER_TTL_MS = 18e4;
+var SAFE_SESSION_ID = /^[A-Za-z0-9-]{1,128}$/;
+function bandMarkerPath(sessionId, dir = FILE_CACHE_DIR) {
+  if (!SAFE_SESSION_ID.test(sessionId))
+    return null;
+  return path5.join(dir, `band-${sessionId}`);
+}
+async function markBand(sessionId, dir = FILE_CACHE_DIR) {
+  const file = bandMarkerPath(sessionId, dir);
+  if (!file)
+    return;
+  await mkdir5(dir, { recursive: true });
+  await writeFile5(file, String(Date.now()));
+}
+function isMissing(err) {
+  return err?.code === "ENOENT";
+}
+async function clearBand(sessionId, dir = FILE_CACHE_DIR) {
+  const file = bandMarkerPath(sessionId, dir);
+  if (!file)
+    return;
+  try {
+    await unlink3(file);
+  } catch (err) {
+    if (!isMissing(err))
+      throw err;
+  }
+}
+async function isBandActive(sessionId, now = Date.now(), dir = FILE_CACHE_DIR) {
+  const file = bandMarkerPath(sessionId, dir);
+  if (!file)
+    return false;
+  try {
+    const { mtimeMs } = await stat11(file);
+    return now - mtimeMs < BAND_MARKER_TTL_MS;
+  } catch (err) {
+    if (isMissing(err))
+      return false;
+    throw err;
+  }
+}
+
 // scripts/statusline.ts
 var CONFIG_PATH = join8(homedir4(), ".claude", "claude-dashboard.local.json");
 var configCache = null;
@@ -4931,7 +4993,7 @@ async function readStdin() {
 }
 async function loadConfig() {
   try {
-    const fileStat = await stat11(CONFIG_PATH);
+    const fileStat = await stat12(CONFIG_PATH);
     const mtime = fileStat.mtimeMs;
     if (configCache?.mtime === mtime) {
       return configCache.config;
@@ -4975,7 +5037,7 @@ function parseStdinRateLimits(stdin) {
   };
 }
 async function main() {
-  const config = await loadConfig();
+  let config = await loadConfig();
   setTheme(config.theme);
   setSeparatorStyle(config.separator);
   const translations = getTranslations(config);
@@ -4983,6 +5045,20 @@ async function main() {
   if (!stdin) {
     console.log(colorize(ICON.warning, COLORS.yellow));
     return;
+  }
+  const renderMode = resolveRenderMode(process.env);
+  if (renderMode.clearSession) {
+    await clearBand(renderMode.clearSession);
+    return;
+  }
+  if (renderMode.markSession) {
+    await markBand(renderMode.markSession);
+  } else if (!renderMode.fromMod && stdin.session_id && await isBandActive(stdin.session_id)) {
+    console.log("");
+    return;
+  }
+  if (renderMode.displayMode) {
+    config = { ...config, displayMode: renderMode.displayMode, lines: void 0 };
   }
   const stdinLimits = parseStdinRateLimits(stdin);
   let rateLimits;

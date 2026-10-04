@@ -19,6 +19,8 @@ import { ICON } from './utils/emoji.js';
 import { fetchUsageLimits } from './utils/api-client.js';
 import { getTranslations } from './utils/i18n.js';
 import { formatOutput } from './widgets/index.js';
+import { resolveRenderMode } from './utils/render-mode.js';
+import { markBand, clearBand, isBandActive } from './utils/band-marker.js';
 
 // The plugin's own config, not one of Claude Code's files, so it deliberately
 // stays on homedir() rather than following CLAUDE_CONFIG_DIR: setup writes it to
@@ -121,7 +123,7 @@ function parseStdinRateLimits(stdin: StdinInput): UsageLimits | null {
  */
 async function main(): Promise<void> {
   // Load configuration
-  const config = await loadConfig();
+  let config = await loadConfig();
 
   // Initialize theme and separator
   setTheme(config.theme);
@@ -135,6 +137,26 @@ async function main(): Promise<void> {
   if (!stdin) {
     console.log(colorize(ICON.warning, COLORS.yellow));
     return;
+  }
+
+  const renderMode = resolveRenderMode(process.env);
+
+  if (renderMode.clearSession) {
+    await clearBand(renderMode.clearSession);
+    return;
+  }
+
+  if (renderMode.markSession) {
+    await markBand(renderMode.markSession);
+  } else if (!renderMode.fromMod && stdin.session_id && (await isBandActive(stdin.session_id))) {
+    // The mod band is drawing this session's dashboard above the prompt.
+    console.log('');
+    return;
+  }
+
+  if (renderMode.displayMode) {
+    // Spread: loadConfig() returns a cached object that must not be mutated.
+    config = { ...config, displayMode: renderMode.displayMode, lines: undefined };
   }
 
   // Build rate limits: prefer stdin, fallback to API
