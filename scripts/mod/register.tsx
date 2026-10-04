@@ -19,7 +19,6 @@ const RUN_TIMEOUT_MS = 5_000
 
 const paneLines = atom({ plugin: 'claude-dashboard', key: 'paneLines' } as const, [] as Segment[][])
 const bandLines = atom({ plugin: 'claude-dashboard', key: 'bandLines' } as const, [] as Segment[][])
-const BAND_STORE_KEY = 'bandEnabled'
 // The band only draws here; elsewhere no heartbeat is sent, so statusLine stays.
 const BAND_SURFACES: ReadonlySet<string> = new Set(['terminal', 'desktop'])
 
@@ -77,7 +76,7 @@ async function canDrawBand($: EngineInterface): Promise<boolean> {
 
 async function refresh($: EngineInterface) {
   if (isPaneOpen) {
-    const lines = await renderLines($, { CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' })
+    const lines = await renderLines($, { CLAUDE_DASHBOARD_SURFACE: 'pane' })
     await update($, paneLines, keepOrWarn(lines))
   }
   // Every band render refreshes the session's marker: the heartbeat that hides statusLine.
@@ -87,9 +86,23 @@ async function refresh($: EngineInterface) {
   }
 }
 
+// Settings live in the dashboard config, which only the Node renderer reads.
+async function bandDefault($: EngineInterface): Promise<boolean> {
+  try {
+    const run = await $.process.run(['node', `${$.plugin.root}/dist/index.js`], {
+      stdin: JSON.stringify(buildStdin(snapshot)),
+      env: { CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_MOD_SETTINGS: '1' },
+      timeoutMs: RUN_TIMEOUT_MS,
+    })
+    return run.exitCode === 0 && JSON.parse(run.stdout).bandDefault === true
+  } catch (err) {
+    $.ui.log(`${strings().renderFailed}: ${(err as Error).message}`)
+    return false
+  }
+}
+
 async function setBand($: EngineInterface, on: boolean) {
   isBandOn = on
-  await $.store.set(BAND_STORE_KEY, on)
   syncTicker($)
   if (on) {
     await refresh($)
@@ -143,7 +156,7 @@ export function register(on: Parameters<Register>[0]) {
       name: 'dashboard-band',
       description: 'Show the dashboard above the prompt instead of the statusLine (on|off)',
     })
-    if ((await $.store.get(BAND_STORE_KEY)) === true) await setBand($, true)
+    if (await bandDefault($)) await setBand($, true)
     return next(e)
   })
 
@@ -200,7 +213,7 @@ export function register(on: Parameters<Register>[0]) {
   })
 
   on('session.end', async ($, e, next) => {
-    // Give statusLine back now rather than after the marker TTL; bandEnabled stays in $.store.
+    // Give statusLine back now rather than after the marker TTL.
     if (isBandOn) await renderLines($, { CLAUDE_DASHBOARD_BAND_OFF: snapshot.sessionId })
     return next(e)
   })

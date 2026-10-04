@@ -4935,20 +4935,32 @@ async function formatOutput(ctx) {
 
 // scripts/utils/render-mode.ts
 var MOD_UNAVAILABLE_WIDGETS = ["cacheHit", "tokenBreakdown", "performance"];
-var MOD_DISPLAY_MODES = ["compact", "normal", "detailed"];
+var SURFACES = ["pane", "band"];
+var NAMED_MODES = ["compact", "normal", "detailed"];
 function resolveRenderMode(env) {
   if (env.CLAUDE_DASHBOARD_MOD !== "1")
     return { fromMod: false };
+  if (env.CLAUDE_DASHBOARD_MOD_SETTINGS === "1")
+    return { fromMod: true, printSettings: true };
   if (env.CLAUDE_DASHBOARD_BAND_OFF) {
     return { fromMod: true, clearSession: env.CLAUDE_DASHBOARD_BAND_OFF };
   }
-  const mode = { fromMod: true };
-  const requested = env.CLAUDE_DASHBOARD_DISPLAY_MODE;
-  if (requested && MOD_DISPLAY_MODES.includes(requested))
-    mode.displayMode = requested;
-  if (env.CLAUDE_DASHBOARD_BAND_SESSION)
-    mode.markSession = env.CLAUDE_DASHBOARD_BAND_SESSION;
-  return mode;
+  if (env.CLAUDE_DASHBOARD_BAND_SESSION) {
+    return { fromMod: true, surface: "band", markSession: env.CLAUDE_DASHBOARD_BAND_SESSION };
+  }
+  const requested = env.CLAUDE_DASHBOARD_SURFACE;
+  return requested && SURFACES.includes(requested) ? { fromMod: true, surface: requested } : { fromMod: true };
+}
+function resolveModLayout(config, surface) {
+  const fallback = surface === "pane" ? { displayMode: "detailed", lines: void 0 } : {};
+  const value = surface === "pane" ? config.modPane : config.modBand;
+  if (!value)
+    return fallback;
+  if (NAMED_MODES.includes(value)) {
+    return { displayMode: value, lines: void 0 };
+  }
+  const lines = parsePreset(value);
+  return lines.length > 0 ? { displayMode: "custom", lines } : fallback;
 }
 
 // scripts/utils/band-marker.ts
@@ -5067,6 +5079,10 @@ async function main() {
     return;
   }
   const renderMode = resolveRenderMode(process.env);
+  if (renderMode.printSettings) {
+    console.log(JSON.stringify({ bandDefault: config.modBandDefault === true }));
+    return;
+  }
   if (renderMode.clearSession) {
     await clearBand(renderMode.clearSession);
     return;
@@ -5077,8 +5093,8 @@ async function main() {
     console.log("");
     return;
   }
-  if (renderMode.displayMode) {
-    config = { ...config, displayMode: renderMode.displayMode, lines: void 0 };
+  if (renderMode.surface) {
+    config = { ...config, ...resolveModLayout(config, renderMode.surface) };
   }
   if (renderMode.fromMod) {
     config = {

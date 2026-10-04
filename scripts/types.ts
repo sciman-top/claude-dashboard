@@ -263,6 +263,12 @@ export interface Config {
    * When set, overrides displayMode with 'custom' and generates lines from the string.
    */
   preset?: string;
+  /** Dashboard mod pane layout: a display mode name or a preset string (default: detailed) */
+  modPane?: string;
+  /** Dashboard mod band layout: a display mode name or a preset string (default: the statusLine layout) */
+  modBand?: string;
+  /** Turn the dashboard mod band on when a session starts */
+  modBandDefault?: boolean;
   /** Daily budget limit in USD. Enables budget tracking widget. */
   dailyBudget?: number;
   /**

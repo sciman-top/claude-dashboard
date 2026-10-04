@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -28,6 +28,10 @@ const run = (env: Record<string, string> = {}) =>
     env: { PATH: process.env.PATH!, HOME: home, ...env },
     encoding: 'utf8',
   });
+const writeConfig = (config: object) => {
+  mkdirSync(path.join(home, '.claude'), { recursive: true });
+  writeFileSync(path.join(home, '.claude', 'claude-dashboard.local.json'), JSON.stringify(config));
+};
 const marker = () => path.join(home, '.cache', 'claude-dashboard', `band-${SID}`);
 
 beforeAll(() => { execFileSync('npm', ['run', 'build'], { cwd: ROOT, stdio: 'ignore' }); });
@@ -52,14 +56,36 @@ describe('renderer under mod env', () => {
 
   it('pane render is not suppressed by an active band', () => {
     run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_BAND_SESSION: SID });
-    const out = run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' });
+    const out = run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_SURFACE: 'pane' });
     expect(out.split('\n').filter(Boolean).length).toBeGreaterThan(1);
   });
 
   it('mod renders hide widgets that need current_usage the mod cannot supply', () => {
-    const out = run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' });
+    const out = run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_SURFACE: 'pane' });
     expect(out).not.toContain('📦');
     expect(run({ CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' })).toBe(run());
+  });
+
+  it('pane uses modPane from the config', () => {
+    writeConfig({ modPane: 'M|C' });
+    const lines = run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_SURFACE: 'pane' }).split('\n').filter(Boolean);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('Opus');
+    expect(lines[1]).toContain('42%');
+  });
+
+  it('band keeps the statusLine layout unless modBand is set', () => {
+    writeConfig({ preset: 'M|C' });
+    const band = () => run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_BAND_SESSION: SID }).split('\n').filter(Boolean);
+    expect(band()).toHaveLength(2);
+    writeConfig({ preset: 'M|C', modBand: 'C' });
+    expect(band()).toHaveLength(1);
+  });
+
+  it('prints mod settings for the mod', () => {
+    expect(JSON.parse(run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_MOD_SETTINGS: '1' }))).toEqual({ bandDefault: false });
+    writeConfig({ modBandDefault: true });
+    expect(JSON.parse(run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_MOD_SETTINGS: '1' }))).toEqual({ bandDefault: true });
   });
 
   it('band off clears the marker and statusLine returns', () => {

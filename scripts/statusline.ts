@@ -19,7 +19,7 @@ import { ICON } from './utils/emoji.js';
 import { fetchUsageLimits } from './utils/api-client.js';
 import { getTranslations } from './utils/i18n.js';
 import { formatOutput } from './widgets/index.js';
-import { resolveRenderMode, MOD_UNAVAILABLE_WIDGETS } from './utils/render-mode.js';
+import { resolveRenderMode, resolveModLayout, MOD_UNAVAILABLE_WIDGETS } from './utils/render-mode.js';
 import { markBand, clearBand, isBandActive } from './utils/band-marker.js';
 
 // The plugin's own config, not one of Claude Code's files, so it deliberately
@@ -141,6 +141,11 @@ async function main(): Promise<void> {
 
   const renderMode = resolveRenderMode(process.env);
 
+  if (renderMode.printSettings) {
+    console.log(JSON.stringify({ bandDefault: config.modBandDefault === true }));
+    return;
+  }
+
   if (renderMode.clearSession) {
     await clearBand(renderMode.clearSession);
     return;
@@ -155,8 +160,8 @@ async function main(): Promise<void> {
   }
 
   // Spread, not mutation: loadConfig() returns a cached object.
-  if (renderMode.displayMode) {
-    config = { ...config, displayMode: renderMode.displayMode, lines: undefined };
+  if (renderMode.surface) {
+    config = { ...config, ...resolveModLayout(config, renderMode.surface) };
   }
   if (renderMode.fromMod) {
     config = {

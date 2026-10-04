@@ -283,7 +283,6 @@ var TICK_MS = 6e4;
 var RUN_TIMEOUT_MS = 5e3;
 var paneLines = atom({ plugin: "claude-dashboard", key: "paneLines" }, []);
 var bandLines = atom({ plugin: "claude-dashboard", key: "bandLines" }, []);
-var BAND_STORE_KEY = "bandEnabled";
 var BAND_SURFACES = /* @__PURE__ */ new Set(["terminal", "desktop"]);
 function strings() {
   try {
@@ -322,7 +321,7 @@ async function canDrawBand($) {
 }
 async function refresh($) {
   if (isPaneOpen) {
-    const lines = await renderLines($, { CLAUDE_DASHBOARD_DISPLAY_MODE: "detailed" });
+    const lines = await renderLines($, { CLAUDE_DASHBOARD_SURFACE: "pane" });
     await update($, paneLines, keepOrWarn(lines));
   }
   if (isBandOn && await canDrawBand($)) {
@@ -330,9 +329,21 @@ async function refresh($) {
     await update($, bandLines, keepOrWarn(lines));
   }
 }
+async function bandDefault($) {
+  try {
+    const run = await $.process.run(["node", `${$.plugin.root}/dist/index.js`], {
+      stdin: JSON.stringify(buildStdin(snapshot)),
+      env: { CLAUDE_DASHBOARD_MOD: "1", CLAUDE_DASHBOARD_MOD_SETTINGS: "1" },
+      timeoutMs: RUN_TIMEOUT_MS
+    });
+    return run.exitCode === 0 && JSON.parse(run.stdout).bandDefault === true;
+  } catch (err) {
+    $.ui.log(`${strings().renderFailed}: ${err.message}`);
+    return false;
+  }
+}
 async function setBand($, on) {
   isBandOn = on;
-  await $.store.set(BAND_STORE_KEY, on);
   syncTicker($);
   if (on) {
     await refresh($);
@@ -371,7 +382,7 @@ function register(on) {
       name: "dashboard-band",
       description: "Show the dashboard above the prompt instead of the statusLine (on|off)"
     });
-    if (await $.store.get(BAND_STORE_KEY) === true)
+    if (await bandDefault($))
       await setBand($, true);
     return next(e);
   });

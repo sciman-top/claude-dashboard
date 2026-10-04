@@ -2,21 +2,22 @@
  * @covers scripts/utils/render-mode.ts
  */
 import { describe, it, expect } from 'vitest';
-import { resolveRenderMode } from '../utils/render-mode.js';
+import { resolveRenderMode, resolveModLayout } from '../utils/render-mode.js';
+import { DEFAULT_CONFIG, type Config } from '../types.js';
 
 describe('resolveRenderMode', () => {
   it('is a plain statusLine render without mod env', () => {
     expect(resolveRenderMode({})).toEqual({ fromMod: false });
   });
 
-  it('reads display mode override only from the mod', () => {
-    expect(resolveRenderMode({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' }))
-      .toEqual({ fromMod: true, displayMode: 'detailed' });
-    expect(resolveRenderMode({ CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' })).toEqual({ fromMod: false });
+  it('reads the surface only from the mod', () => {
+    expect(resolveRenderMode({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_SURFACE: 'pane' }))
+      .toEqual({ fromMod: true, surface: 'pane' });
+    expect(resolveRenderMode({ CLAUDE_DASHBOARD_SURFACE: 'pane' })).toEqual({ fromMod: false });
   });
 
-  it('ignores unknown display modes', () => {
-    expect(resolveRenderMode({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_DISPLAY_MODE: 'huge' }))
+  it('ignores unknown surfaces', () => {
+    expect(resolveRenderMode({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_SURFACE: 'huge' }))
       .toEqual({ fromMod: true });
   });
 
@@ -28,8 +29,39 @@ describe('resolveRenderMode', () => {
     })).toEqual({ fromMod: true, clearSession: 'a' });
   });
 
-  it('marks the band session', () => {
+  it('a band session marks and implies the band surface', () => {
     expect(resolveRenderMode({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_BAND_SESSION: 'a' }))
-      .toEqual({ fromMod: true, markSession: 'a' });
+      .toEqual({ fromMod: true, surface: 'band', markSession: 'a' });
+  });
+
+  it('asks for mod settings', () => {
+    expect(resolveRenderMode({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_MOD_SETTINGS: '1' }))
+      .toEqual({ fromMod: true, printSettings: true });
+  });
+});
+
+describe('resolveModLayout', () => {
+  const config = (extra: Partial<Config> = {}): Config => ({ ...DEFAULT_CONFIG, ...extra });
+
+  it('pane defaults to detailed', () => {
+    expect(resolveModLayout(config(), 'pane')).toEqual({ displayMode: 'detailed', lines: undefined });
+  });
+
+  it('band defaults to the statusLine layout', () => {
+    expect(resolveModLayout(config(), 'band')).toEqual({});
+  });
+
+  it('accepts a display mode name', () => {
+    expect(resolveModLayout(config({ modBand: 'normal' }), 'band')).toEqual({ displayMode: 'normal', lines: undefined });
+  });
+
+  it('accepts a preset string', () => {
+    expect(resolveModLayout(config({ modPane: 'MC|$' }), 'pane'))
+      .toEqual({ displayMode: 'custom', lines: [['model', 'context'], ['cost']] });
+  });
+
+  it('falls back on an unparsable value', () => {
+    expect(resolveModLayout(config({ modPane: '~~' }), 'pane')).toEqual({ displayMode: 'detailed', lines: undefined });
+    expect(resolveModLayout(config({ modBand: '~~' }), 'band')).toEqual({});
   });
 });
