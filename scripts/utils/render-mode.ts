@@ -13,6 +13,12 @@ export interface RenderMode {
   clearSession?: string;
 }
 
+/**
+ * Widgets fed only by stdin's per-request `current_usage`, which the mod API does not expose:
+ * under the mod they would show a constant 0%, so mod renders hide them.
+ */
+export const MOD_UNAVAILABLE_WIDGETS = ['cacheHit', 'tokenBreakdown', 'performance'] as const;
+
 const MOD_DISPLAY_MODES: readonly ModDisplayMode[] = ['compact', 'normal', 'detailed'];
 
 export function resolveRenderMode(env: Record<string, string | undefined>): RenderMode {

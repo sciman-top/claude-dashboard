@@ -19,7 +19,7 @@ import { ICON } from './utils/emoji.js';
 import { fetchUsageLimits } from './utils/api-client.js';
 import { getTranslations } from './utils/i18n.js';
 import { formatOutput } from './widgets/index.js';
-import { resolveRenderMode } from './utils/render-mode.js';
+import { resolveRenderMode, MOD_UNAVAILABLE_WIDGETS } from './utils/render-mode.js';
 import { markBand, clearBand, isBandActive } from './utils/band-marker.js';
 
 // The plugin's own config, not one of Claude Code's files, so it deliberately
@@ -154,9 +154,15 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Spread, not mutation: loadConfig() returns a cached object.
   if (renderMode.displayMode) {
-    // Spread: loadConfig() returns a cached object that must not be mutated.
     config = { ...config, displayMode: renderMode.displayMode, lines: undefined };
+  }
+  if (renderMode.fromMod) {
+    config = {
+      ...config,
+      disabledWidgets: [...(config.disabledWidgets ?? []), ...MOD_UNAVAILABLE_WIDGETS],
+    };
   }
 
   // Build rate limits: prefer stdin, fallback to API

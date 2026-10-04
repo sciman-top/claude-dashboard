@@ -18,10 +18,13 @@ async function getContextData(ctx: WidgetContext): Promise<ContextData | null> {
   const officialPercent = context_window?.used_percentage;
 
   if (!usage) {
+    // Since 2.1.132 total_input_tokens is the current context too; the dashboard mod, which
+    // has no per-request usage, supplies only this.
+    const inputTokens = context_window?.total_input_tokens ?? 0;
     return {
-      inputTokens: 0,
+      inputTokens,
       outputTokens: 0,
-      totalTokens: 0,
+      totalTokens: inputTokens,
       contextSize,
       percentage: typeof officialPercent === 'number' ? Math.round(officialPercent) : 0,
     };

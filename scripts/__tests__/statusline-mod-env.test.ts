@@ -56,6 +56,12 @@ describe('renderer under mod env', () => {
     expect(out.split('\n').filter(Boolean).length).toBeGreaterThan(1);
   });
 
+  it('mod renders hide widgets that need current_usage the mod cannot supply', () => {
+    const out = run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' });
+    expect(out).not.toContain('📦');
+    expect(run({ CLAUDE_DASHBOARD_DISPLAY_MODE: 'detailed' })).toBe(run());
+  });
+
   it('band off clears the marker and statusLine returns', () => {
     run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_BAND_SESSION: SID });
     expect(run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_BAND_OFF: SID }).trim()).toBe('');
