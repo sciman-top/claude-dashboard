@@ -622,7 +622,8 @@ var CLEANABLE_PREFIXES = [
   "antigravity-usage-",
   "antigravity-token-",
   "zai-usage-",
-  "transcript-"
+  "transcript-",
+  "band-"
 ];
 var lastCleanupTime = 0;
 function fileCachePath(name) {
