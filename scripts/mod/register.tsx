@@ -27,15 +27,19 @@ const BAND_SURFACES: ReadonlySet<string> = new Set(['terminal', 'desktop'])
 type Strings = typeof en.mod
 
 // The mod cannot read the dashboard config; follow the host locale, falling back to English.
+let cachedStrings: Strings | null = null
 function strings(): Strings {
+  if (cachedStrings) return cachedStrings
   try {
-    return (Intl.DateTimeFormat().resolvedOptions().locale.startsWith('ko') ? ko : en).mod
+    cachedStrings = (Intl.DateTimeFormat().resolvedOptions().locale.startsWith('ko') ? ko : en).mod
   } catch {
-    return en.mod
+    cachedStrings = en.mod
   }
+  return cachedStrings
 }
 
 interface Usage {
+  startedAt?: number
   context: { tokens?: number; window: number; percent?: number }
   rateLimits: readonly ModRateLimit[]
   cost?: { usd: number }
@@ -115,6 +119,33 @@ async function refresh($: EngineInterface) {
   await Promise.all([refreshPane($), refreshBand($)])
 }
 
+// One refresh at a time: a request during a run folds into one more run after it, so a burst
+// of measures spawns at most two renders and an older run never lands after a newer one.
+let refreshing: Promise<void> | null = null
+let refreshAgain = false
+
+function requestRefresh($: EngineInterface): Promise<void> {
+  if (refreshing) {
+    refreshAgain = true
+    return refreshing
+  }
+  refreshing = drainRefreshes($)
+  return refreshing
+}
+
+async function drainRefreshes($: EngineInterface) {
+  try {
+    do {
+      refreshAgain = false
+      await refresh($)
+    } while (refreshAgain)
+  } catch (err) {
+    $.ui.log(`${strings().renderFailed}: ${(err as Error).message}`)
+  } finally {
+    refreshing = null
+  }
+}
+
 // Settings live in the dashboard config, which only the Node renderer reads.
 async function bandDefault($: EngineInterface): Promise<boolean> {
   try {
@@ -134,7 +165,7 @@ async function setBand($: EngineInterface, on: boolean) {
   if (on) {
     isBandOn = true
     syncTicker($)
-    await refresh($)
+    await requestRefresh($)
   } else {
     await stopBand($)
     syncTicker($)
@@ -144,7 +175,7 @@ async function setBand($: EngineInterface, on: boolean) {
 
 function syncTicker($: EngineInterface) {
   const needed = isPaneOpen || isBandOn
-  if (needed && !ticker) ticker = $.clock.every(TICK_MS, () => void refresh($))
+  if (needed && !ticker) ticker = $.clock.every(TICK_MS, () => void requestRefresh($))
   if (!needed && ticker) {
     ticker.cancel()
     ticker = null
@@ -152,9 +183,25 @@ function syncTicker($: EngineInterface) {
 }
 
 function applyUsage(u: Usage) {
+  if (u.startedAt !== undefined) snapshot.startedAt = u.startedAt
   snapshot.context = { tokens: u.context.tokens, window: u.context.window, percent: u.context.percent }
   snapshot.rateLimits = [...u.rateLimits]
   snapshot.costUsd = u.cost?.usd
+}
+
+// /clear, /resume and /branch replace the session without a new session.start: move the band
+// marker to the new id and re-read the session-scoped figures.
+async function switchSession($: EngineInterface, sessionId: string) {
+  const wasBandOn = isBandOn
+  if (wasBandOn) await stopBand($)
+  snapshot.sessionId = sessionId
+  applyUsage(await $.session.usage())
+  if (wasBandOn || (await bandDefault($))) {
+    await setBand($, true)
+  } else {
+    syncTicker($)
+    await requestRefresh($)
+  }
 }
 
 // Box/Text come from $.ui.resolve(e): each surface has its own element table.
@@ -195,15 +242,20 @@ export function register(on: Parameters<Register>[0]) {
     return next(e)
   })
 
-  on('classic.SessionStart', ($, e, next) => {
+  on('classic.SessionStart', async ($, e, next) => {
     if (e.transcript_path) snapshot.transcriptPath = e.transcript_path
+    if (e.cwd) snapshot.cwd = e.cwd
+    // An empty id means session.start has not run yet; it sets the id and band itself.
+    if (e.session_id && snapshot.sessionId && e.session_id !== snapshot.sessionId) {
+      await switchSession($, e.session_id)
+    }
     return next(e)
   })
 
   on('session.measure', async ($, e, next) => {
     applyUsage(e)
     snapshot.model = await $.session.model()
-    void refresh($)
+    void requestRefresh($)
     return next(e)
   })
 
@@ -217,7 +269,7 @@ export function register(on: Parameters<Register>[0]) {
     isPaneOpen = true
     await $.ui.open({ id: PANE, title: strings().paneTitle })
     syncTicker($)
-    await refresh($)
+    await requestRefresh($)
     return { text: strings().paneOpened }
   })
 

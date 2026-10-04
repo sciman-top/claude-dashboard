@@ -251,7 +251,7 @@ function rateLimitsFrom(list) {
   }
   return Object.keys(out).length > 0 ? out : void 0;
 }
-function buildStdin(s) {
+function buildStdin(s, now = Date.now()) {
   const percent = s.context?.percent ?? null;
   const stdin = {
     session_id: s.sessionId,
@@ -267,6 +267,9 @@ function buildStdin(s) {
     },
     cost: { total_cost_usd: s.costUsd ?? 0 }
   };
+  if (s.startedAt !== void 0 && now >= s.startedAt) {
+    stdin.cost.total_duration_ms = now - s.startedAt;
+  }
   if (s.version)
     stdin.version = s.version;
   if (s.transcriptPath)
@@ -284,12 +287,16 @@ var RUN_TIMEOUT_MS = 5e3;
 var paneLines = atom({ plugin: "claude-dashboard", key: "paneLines" }, []);
 var bandLines = atom({ plugin: "claude-dashboard", key: "bandLines" }, []);
 var BAND_SURFACES = /* @__PURE__ */ new Set(["terminal", "desktop"]);
+var cachedStrings = null;
 function strings() {
+  if (cachedStrings)
+    return cachedStrings;
   try {
-    return (Intl.DateTimeFormat().resolvedOptions().locale.startsWith("ko") ? ko_default : en_default).mod;
+    cachedStrings = (Intl.DateTimeFormat().resolvedOptions().locale.startsWith("ko") ? ko_default : en_default).mod;
   } catch {
-    return en_default.mod;
+    cachedStrings = en_default.mod;
   }
+  return cachedStrings;
 }
 var snapshot = { sessionId: "", model: "", cwd: "", rateLimits: [] };
 var isPaneOpen = false;
@@ -351,6 +358,28 @@ async function stopBand($) {
 async function refresh($) {
   await Promise.all([refreshPane($), refreshBand($)]);
 }
+var refreshing = null;
+var refreshAgain = false;
+function requestRefresh($) {
+  if (refreshing) {
+    refreshAgain = true;
+    return refreshing;
+  }
+  refreshing = drainRefreshes($);
+  return refreshing;
+}
+async function drainRefreshes($) {
+  try {
+    do {
+      refreshAgain = false;
+      await refresh($);
+    } while (refreshAgain);
+  } catch (err) {
+    $.ui.log(`${strings().renderFailed}: ${err.message}`);
+  } finally {
+    refreshing = null;
+  }
+}
 async function bandDefault($) {
   try {
     const run = await $.process.run(["node", `${$.plugin.root}/dist/index.js`], {
@@ -368,7 +397,7 @@ async function setBand($, on) {
   if (on) {
     isBandOn = true;
     syncTicker($);
-    await refresh($);
+    await requestRefresh($);
   } else {
     await stopBand($);
     syncTicker($);
@@ -378,16 +407,31 @@ async function setBand($, on) {
 function syncTicker($) {
   const needed = isPaneOpen || isBandOn;
   if (needed && !ticker)
-    ticker = $.clock.every(TICK_MS, () => void refresh($));
+    ticker = $.clock.every(TICK_MS, () => void requestRefresh($));
   if (!needed && ticker) {
     ticker.cancel();
     ticker = null;
   }
 }
 function applyUsage(u) {
+  if (u.startedAt !== void 0)
+    snapshot.startedAt = u.startedAt;
   snapshot.context = { tokens: u.context.tokens, window: u.context.window, percent: u.context.percent };
   snapshot.rateLimits = [...u.rateLimits];
   snapshot.costUsd = u.cost?.usd;
+}
+async function switchSession($, sessionId) {
+  const wasBandOn = isBandOn;
+  if (wasBandOn)
+    await stopBand($);
+  snapshot.sessionId = sessionId;
+  applyUsage(await $.session.usage());
+  if (wasBandOn || await bandDefault($)) {
+    await setBand($, true);
+  } else {
+    syncTicker($);
+    await requestRefresh($);
+  }
 }
 function drawLines(Box, Text, lines) {
   return /* @__PURE__ */ h(Box, { flexDirection: "column" }, lines.map((line) => /* @__PURE__ */ h(Text, null, line.map((seg) => /* @__PURE__ */ h(Text, { color: seg.color, bold: seg.bold, dimColor: seg.dim }, seg.text)))));
@@ -413,15 +457,20 @@ function register(on) {
       await setBand($, true);
     return next(e);
   });
-  on("classic.SessionStart", ($, e, next) => {
+  on("classic.SessionStart", async ($, e, next) => {
     if (e.transcript_path)
       snapshot.transcriptPath = e.transcript_path;
+    if (e.cwd)
+      snapshot.cwd = e.cwd;
+    if (e.session_id && snapshot.sessionId && e.session_id !== snapshot.sessionId) {
+      await switchSession($, e.session_id);
+    }
     return next(e);
   });
   on("session.measure", async ($, e, next) => {
     applyUsage(e);
     snapshot.model = await $.session.model();
-    void refresh($);
+    void requestRefresh($);
     return next(e);
   });
   on("command.run", { command: "dashboard" }, async ($) => {
@@ -434,7 +483,7 @@ function register(on) {
     isPaneOpen = true;
     await $.ui.open({ id: PANE, title: strings().paneTitle });
     syncTicker($);
-    await refresh($);
+    await requestRefresh($);
     return { text: strings().paneOpened };
   });
   on("ui.close", { id: "claude-dashboard" }, ($, e, next) => {

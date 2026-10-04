@@ -22,6 +22,8 @@ export interface ModSnapshot {
   context?: { tokens?: number; window: number; percent?: number };
   rateLimits: ModRateLimit[];
   costUsd?: number;
+  /** Session start (epoch ms) from `$.session.usage().startedAt` */
+  startedAt?: number;
 }
 
 type Window = 'five_hour' | 'seven_day';
@@ -47,7 +49,7 @@ function rateLimitsFrom(list: ModRateLimit[]): StdinInput['rate_limits'] {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-export function buildStdin(s: ModSnapshot): StdinInput {
+export function buildStdin(s: ModSnapshot, now: number = Date.now()): StdinInput {
   const percent = s.context?.percent ?? null;
   const stdin: StdinInput = {
     session_id: s.sessionId,
@@ -63,6 +65,11 @@ export function buildStdin(s: ModSnapshot): StdinInput {
     },
     cost: { total_cost_usd: s.costUsd ?? 0 },
   };
+  // Without it, clock widgets fall back to a session file started at the first mod render,
+  // which understates elapsed time and inflates session averages against cumulative cost.
+  if (s.startedAt !== undefined && now >= s.startedAt) {
+    stdin.cost.total_duration_ms = now - s.startedAt;
+  }
   if (s.version) stdin.version = s.version;
   if (s.transcriptPath) stdin.transcript_path = s.transcriptPath;
   const rateLimits = rateLimitsFrom(s.rateLimits);

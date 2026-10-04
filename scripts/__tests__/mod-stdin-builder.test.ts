@@ -63,6 +63,16 @@ describe('buildStdin', () => {
     expect(s.rate_limits).toBeUndefined();
   });
 
+  it('reports elapsed session time from the mod-observed start', () => {
+    const s = buildStdin({ ...base, startedAt: 1_000_000 }, 1_600_000);
+    expect(s.cost).toEqual({ total_cost_usd: 0, total_duration_ms: 600_000 });
+  });
+
+  it('omits elapsed time when the start is unknown or in the future', () => {
+    expect(buildStdin(base, 5).cost.total_duration_ms).toBeUndefined();
+    expect(buildStdin({ ...base, startedAt: 10 }, 5).cost.total_duration_ms).toBeUndefined();
+  });
+
   it('passes transcript path when known', () => {
     expect(buildStdin({ ...base, transcriptPath: '/t.jsonl' }).transcript_path).toBe('/t.jsonl');
     expect(buildStdin(base).transcript_path).toBeUndefined();
