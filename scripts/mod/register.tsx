@@ -208,7 +208,9 @@ async function switchSession($: EngineInterface, sessionId: string) {
   const wasBandOn = isBandOn
   if (wasBandOn) await stopBand($)
   snapshot.sessionId = sessionId
-  applyUsage(await $.session.usage())
+  const [usage, model] = await Promise.all([$.session.usage(), $.session.model()])
+  applyUsage(usage)
+  snapshot.model = model
   if (wasBandOn || (await bandDefault($))) {
     await setBand($, true)
   } else {
@@ -319,6 +321,7 @@ export function register(on: Parameters<Register>[0]) {
   on('session.end', async ($, e, next) => {
     // Give statusLine back now rather than after the marker TTL.
     if (isBandOn) await stopBand($)
+    isPaneOpen = false
     syncTicker($)
     return next(e)
   })

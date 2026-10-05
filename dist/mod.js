@@ -452,7 +452,9 @@ async function switchSession($, sessionId) {
   if (wasBandOn)
     await stopBand($);
   snapshot.sessionId = sessionId;
-  applyUsage(await $.session.usage());
+  const [usage, model] = await Promise.all([$.session.usage(), $.session.model()]);
+  applyUsage(usage);
+  snapshot.model = model;
   if (wasBandOn || await bandDefault($)) {
     await setBand($, true);
   } else {
@@ -544,6 +546,7 @@ function register(on) {
   on("session.end", async ($, e, next) => {
     if (isBandOn)
       await stopBand($);
+    isPaneOpen = false;
     syncTicker($);
     return next(e);
   });
