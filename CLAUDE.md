@@ -31,7 +31,8 @@ claude-dashboard/
 │   ├── mod/
 │   │   ├── register.tsx     # Mod entry: /claude-dashboard-pane pane + /claude-dashboard-band band
 │   │   ├── stdin-builder.ts # Builds renderer stdin from mod API state
-│   │   └── ansi.ts          # ANSI parser for mod rendering
+│   │   ├── ansi.ts          # ANSI parser for mod rendering
+│   │   └── toggle.ts        # Shared on/off/toggle argument rule for mod commands
 │   ├── types.ts             # TypeScript interfaces
 │   ├── widgets/             # Widget system
 │   │   ├── base.ts          # Widget interface
@@ -369,7 +370,7 @@ Before committing:
 
 1. Edit `scripts/mod/register.tsx` (config keys `modPane` / `modBand` / `modBandDefault` live in `scripts/types.ts`)
 2. `npm run build && claude plugin validate .` (validate also reports a pre-existing reserved-name error for "claude-dashboard"; ignore it)
-3. Real-render check: `claude --plugin-dir .`, then `/claude-dashboard-pane` and `/claude-dashboard-band on`
+3. Real-render check: `claude --plugin-dir .`, then `/claude-dashboard-pane` and `/claude-dashboard-band on` (both take `on` / `off` / nothing to toggle)
 4. Constraints: helpers that take `$` must be top-level function declarations; atom plugin/key and ui matchers must be string literals; `export function register`; no minify
 
 ## Cache Architecture
