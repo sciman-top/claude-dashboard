@@ -13,8 +13,8 @@ mod는 터미널과 데스크톱 Code 탭에서만 표시됩니다. VS Code 패�
 
 | 명령어 | 동작 |
 |--------|------|
-| `/claude-dashboard-pane` | 대화 기록 옆에 대시보드 패널을 켜고 끕니다. 레이아웃은 `modPane`(기본값 `detailed`)을 따릅니다. |
-| `/claude-dashboard-band on\|off` | 프롬프트 위에 대시보드를 표시하고 **현재 세션에서만** statusLine을 숨깁니다. 레이아웃은 `modBand`(기본값: statusLine 레이아웃)를 따릅니다. |
+| `/claude-dashboard-pane [on\|off]` | 대화 기록 옆에 대시보드 패널을 열거나 닫습니다(인자가 없으면 현재 상태 반대로). 레이아웃은 `modPane`(기본값 `detailed`)을 따릅니다. |
+| `/claude-dashboard-band [on\|off]` | 프롬프트 위에 대시보드를 표시하고 **현재 세션에서만** statusLine을 숨깁니다. 레이아웃은 `modBand`(기본값: statusLine 레이아웃)를 따릅니다. |
 
 `/claude-dashboard-band`는 `settings.json`을 수정하지 않으며 현재 세션에만 적용됩니다.
 

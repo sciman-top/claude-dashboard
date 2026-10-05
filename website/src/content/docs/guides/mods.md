@@ -13,8 +13,8 @@ Mods are drawn only in the terminal and the desktop Code tab. They do not appear
 
 | Command | What it does |
 |---------|--------------|
-| `/claude-dashboard-pane` | Toggle a dashboard pane beside the transcript. Layout from `modPane` (default `detailed`). |
-| `/claude-dashboard-band on\|off` | Draw the dashboard above the prompt and hide the status line for **this session only**. Layout from `modBand` (default: your status line layout). |
+| `/claude-dashboard-pane [on\|off]` | Open or close a dashboard pane beside the transcript (no argument flips it). Layout from `modPane` (default `detailed`). |
+| `/claude-dashboard-band [on\|off]` | Draw the dashboard above the prompt and hide the status line for **this session only**. Layout from `modBand` (default: your status line layout). |
 
 `/claude-dashboard-band` never touches `settings.json` and applies to the current session only.
 

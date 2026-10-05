@@ -316,4 +316,4 @@ have hooks disabled or the status line is not updating.
 - The status line will update on the next message
 - To change settings later, run this command again
 - Custom mode allows full control over which widgets appear on each line
-- Mods (tested on Claude Code 2.1.289): `/claude-dashboard-pane` toggles a pane beside the transcript; `/claude-dashboard-band on|off` draws the dashboard above the prompt and hides the status line for the current session only
+- Mods (tested on Claude Code 2.1.289): `/claude-dashboard-pane [on|off]` opens or closes a pane beside the transcript; `/claude-dashboard-band [on|off]` draws the dashboard above the prompt and hides the status line for the current session only

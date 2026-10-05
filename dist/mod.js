@@ -67,7 +67,8 @@ var en_default = {
     paneClosed: "Dashboard pane closed.",
     bandOn: "Dashboard band on \u2014 statusLine hidden for this session (terminal/desktop only).",
     bandOff: "Dashboard band off \u2014 statusLine restored.",
-    bandUsage: "Usage: /claude-dashboard-band on|off",
+    paneUsage: "Usage: /claude-dashboard-pane [on|off]",
+    bandUsage: "Usage: /claude-dashboard-band [on|off]",
     renderFailed: "Dashboard render failed"
   }
 };
@@ -138,7 +139,8 @@ var ko_default = {
     paneClosed: "\uB300\uC2DC\uBCF4\uB4DC \uD328\uB110\uC744 \uB2EB\uC558\uC2B5\uB2C8\uB2E4.",
     bandOn: "\uB300\uC2DC\uBCF4\uB4DC \uBC34\uB4DC \uCF1C\uC9D0 \u2014 \uC774 \uC138\uC158\uC758 statusLine\uC744 \uC228\uAE41\uB2C8\uB2E4 (\uD130\uBBF8\uB110/\uB370\uC2A4\uD06C\uD1B1 \uC804\uC6A9).",
     bandOff: "\uB300\uC2DC\uBCF4\uB4DC \uBC34\uB4DC \uAEBC\uC9D0 \u2014 statusLine\uC744 \uBCF5\uC6D0\uD588\uC2B5\uB2C8\uB2E4.",
-    bandUsage: "\uC0AC\uC6A9\uBC95: /claude-dashboard-band on|off",
+    paneUsage: "\uC0AC\uC6A9\uBC95: /claude-dashboard-pane [on|off]",
+    bandUsage: "\uC0AC\uC6A9\uBC95: /claude-dashboard-band [on|off]",
     renderFailed: "\uB300\uC2DC\uBCF4\uB4DC \uB80C\uB354 \uC2E4\uD328"
   }
 };
@@ -227,6 +229,18 @@ function parseAnsi(line) {
   }
   push(clean.slice(last));
   return out;
+}
+
+// scripts/mod/toggle.ts
+function resolveToggle(args, current) {
+  const arg = args.trim().toLowerCase();
+  if (arg === "")
+    return !current;
+  if (arg === "on")
+    return true;
+  if (arg === "off")
+    return false;
+  return null;
 }
 
 // scripts/mod/stdin-builder.ts
@@ -420,6 +434,19 @@ function applyUsage(u) {
   snapshot.rateLimits = [...u.rateLimits];
   snapshot.costUsd = u.cost?.usd;
 }
+async function setPane($, open) {
+  if (open === isPaneOpen)
+    return;
+  isPaneOpen = open;
+  if (open) {
+    await $.ui.open({ id: PANE, title: strings().paneTitle });
+  } else {
+    await $.ui.close({ id: PANE });
+  }
+  syncTicker($);
+  if (open)
+    await requestRefresh($);
+}
 async function switchSession($, sessionId) {
   const wasBandOn = isBandOn;
   if (wasBandOn)
@@ -438,7 +465,11 @@ function drawLines(Box, Text, lines) {
 }
 function register(on) {
   on("session.start", async ($, e, next) => {
-    await $.command.register({ name: "claude-dashboard-pane", description: "Toggle the claude-dashboard pane" });
+    await $.command.register({
+      name: "claude-dashboard-pane",
+      description: "Show the dashboard in a pane beside the transcript (on|off, none toggles)",
+      argumentHint: "[on|off]"
+    });
     const [id, model, cwd, root, version, usage] = await Promise.all([
       $.session.id(),
       $.session.model(),
@@ -451,7 +482,8 @@ function register(on) {
     applyUsage(usage);
     await $.command.register({
       name: "claude-dashboard-band",
-      description: "Show the dashboard above the prompt instead of the statusLine (on|off)"
+      description: "Show the dashboard above the prompt instead of the statusLine (on|off, none toggles)",
+      argumentHint: "[on|off]"
     });
     if (await bandDefault($))
       await setBand($, true);
@@ -473,18 +505,12 @@ function register(on) {
     void requestRefresh($);
     return next(e);
   });
-  on("command.run", { command: "claude-dashboard-pane" }, async ($) => {
-    if (isPaneOpen) {
-      isPaneOpen = false;
-      await $.ui.close({ id: PANE });
-      syncTicker($);
-      return { text: strings().paneClosed };
-    }
-    isPaneOpen = true;
-    await $.ui.open({ id: PANE, title: strings().paneTitle });
-    syncTicker($);
-    await requestRefresh($);
-    return { text: strings().paneOpened };
+  on("command.run", { command: "claude-dashboard-pane" }, async ($, e) => {
+    const open = resolveToggle(e.args, isPaneOpen);
+    if (open === null)
+      return { text: strings().paneUsage };
+    await setPane($, open);
+    return { text: open ? strings().paneOpened : strings().paneClosed };
   });
   on("ui.close", { id: "claude-dashboard" }, ($, e, next) => {
     isPaneOpen = false;
@@ -492,11 +518,11 @@ function register(on) {
     return next(e);
   });
   on("command.run", { command: "claude-dashboard-band" }, async ($, e) => {
-    const arg = e.args.trim().toLowerCase();
-    if (arg !== "on" && arg !== "off")
+    const on2 = resolveToggle(e.args, isBandOn);
+    if (on2 === null)
       return { text: strings().bandUsage };
-    await setBand($, arg === "on");
-    return { text: arg === "on" ? strings().bandOn : strings().bandOff };
+    await setBand($, on2);
+    return { text: on2 ? strings().bandOn : strings().bandOff };
   });
   on("ui.render", { component: "Pane", requestId: "claude-dashboard" }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e);

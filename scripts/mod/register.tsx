@@ -13,6 +13,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import en from '../../locales/en.json'
 import ko from '../../locales/ko.json'
 import { parseAnsi, type Segment } from './ansi'
+import { resolveToggle } from './toggle'
 import { buildStdin, type ModRateLimit, type ModSnapshot } from './stdin-builder'
 
 const PANE = 'claude-dashboard'
@@ -189,6 +190,18 @@ function applyUsage(u: Usage) {
   snapshot.costUsd = u.cost?.usd
 }
 
+async function setPane($: EngineInterface, open: boolean) {
+  if (open === isPaneOpen) return
+  isPaneOpen = open
+  if (open) {
+    await $.ui.open({ id: PANE, title: strings().paneTitle })
+  } else {
+    await $.ui.close({ id: PANE })
+  }
+  syncTicker($)
+  if (open) await requestRefresh($)
+}
+
 // /clear, /resume and /branch replace the session without a new session.start: move the band
 // marker to the new id and re-read the session-scoped figures.
 async function switchSession($: EngineInterface, sessionId: string) {
@@ -222,7 +235,11 @@ function drawLines(Box: any, Text: any, lines: Segment[][]) {
 
 export function register(on: Parameters<Register>[0]) {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'claude-dashboard-pane', description: 'Toggle the claude-dashboard pane' })
+    await $.command.register({
+      name: 'claude-dashboard-pane',
+      description: 'Show the dashboard in a pane beside the transcript (on|off, none toggles)',
+      argumentHint: '[on|off]',
+    })
     // session.start is awaited before the first prompt: fetch the independent reads together.
     const [id, model, cwd, root, version, usage] = await Promise.all([
       $.session.id(),
@@ -236,7 +253,8 @@ export function register(on: Parameters<Register>[0]) {
     applyUsage(usage)
     await $.command.register({
       name: 'claude-dashboard-band',
-      description: 'Show the dashboard above the prompt instead of the statusLine (on|off)',
+      description: 'Show the dashboard above the prompt instead of the statusLine (on|off, none toggles)',
+      argumentHint: '[on|off]',
     })
     if (await bandDefault($)) await setBand($, true)
     return next(e)
@@ -259,18 +277,12 @@ export function register(on: Parameters<Register>[0]) {
     return next(e)
   })
 
-  on('command.run', { command: 'claude-dashboard-pane' }, async $ => {
-    if (isPaneOpen) {
-      isPaneOpen = false
-      await $.ui.close({ id: PANE })
-      syncTicker($)
-      return { text: strings().paneClosed }
-    }
-    isPaneOpen = true
-    await $.ui.open({ id: PANE, title: strings().paneTitle })
-    syncTicker($)
-    await requestRefresh($)
-    return { text: strings().paneOpened }
+  // Both commands take on, off, or nothing to flip the current state.
+  on('command.run', { command: 'claude-dashboard-pane' }, async ($, e) => {
+    const open = resolveToggle(e.args, isPaneOpen)
+    if (open === null) return { text: strings().paneUsage }
+    await setPane($, open)
+    return { text: open ? strings().paneOpened : strings().paneClosed }
   })
 
   on('ui.close', { id: 'claude-dashboard' }, ($, e, next) => {
@@ -280,10 +292,10 @@ export function register(on: Parameters<Register>[0]) {
   })
 
   on('command.run', { command: 'claude-dashboard-band' }, async ($, e) => {
-    const arg = e.args.trim().toLowerCase()
-    if (arg !== 'on' && arg !== 'off') return { text: strings().bandUsage }
-    await setBand($, arg === 'on')
-    return { text: arg === 'on' ? strings().bandOn : strings().bandOff }
+    const on = resolveToggle(e.args, isBandOn)
+    if (on === null) return { text: strings().bandUsage }
+    await setBand($, on)
+    return { text: on ? strings().bandOn : strings().bandOff }
   })
 
   on('ui.render', { component: 'Pane', requestId: 'claude-dashboard' }, async ($, e) => {

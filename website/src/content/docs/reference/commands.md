@@ -131,7 +131,15 @@ restart is needed.
 
 ## /claude-dashboard-pane
 
-Toggle a dashboard pane beside the transcript (mod, tested on Claude Code 2.1.289). Layout comes from the `modPane` config key (default `detailed`). See [Mods](/guides/mods/).
+Open or close a dashboard pane beside the transcript (mod, tested on Claude Code 2.1.289). Takes `on`, `off`, or no argument to flip the current state.
+
+```bash
+/claude-dashboard-pane on
+/claude-dashboard-pane off
+/claude-dashboard-pane      # no argument: flip the current state
+```
+
+Layout comes from the `modPane` config key (default `detailed`). See [Mods](/guides/mods/).
 
 ## /claude-dashboard-band
 
@@ -140,6 +148,7 @@ Draw the dashboard above the prompt and hide the status line for the current ses
 ```bash
 /claude-dashboard-band on
 /claude-dashboard-band off
+/claude-dashboard-band      # no argument: flip the current state
 ```
 
 Layout comes from `modBand` (default: your status line layout). Set `"modBandDefault": true` to turn it on at session start. `settings.json` is never modified. See [Mods](/guides/mods/).

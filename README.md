@@ -247,8 +247,8 @@ claude-dashboard also ships as a Claude Code **mod** (function-hook plugin, earl
 
 | Command | What it does |
 |---------|--------------|
-| `/claude-dashboard-pane` | Toggle a dashboard pane beside the transcript. Layout from `modPane` (default `detailed`). |
-| `/claude-dashboard-band on\|off` | Draw the dashboard above the prompt and hide the status line for **this session only** (`settings.json` is untouched). Layout from `modBand` (default = your status line layout). |
+| `/claude-dashboard-pane [on\|off]` | Open or close a dashboard pane beside the transcript (no argument flips it). Layout from `modPane` (default `detailed`). |
+| `/claude-dashboard-band [on\|off]` | Draw the dashboard above the prompt and hide the status line for **this session only** (`settings.json` is untouched). Layout from `modBand` (default = your status line layout). |
 
 ```json
 {
