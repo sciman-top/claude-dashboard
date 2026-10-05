@@ -208,9 +208,12 @@ async function switchSession($: EngineInterface, sessionId: string) {
   const wasBandOn = isBandOn
   if (wasBandOn) await stopBand($)
   snapshot.sessionId = sessionId
-  const [usage, model] = await Promise.all([$.session.usage(), $.session.model()])
-  applyUsage(usage)
-  snapshot.model = model
+  // A failed read keeps the last value; the band must still be re-applied under the new id.
+  const [usage, model] = await Promise.allSettled([$.session.usage(), $.session.model()])
+  if (usage.status === 'fulfilled') applyUsage(usage.value)
+  else $.ui.log(`${strings().renderFailed}: ${(usage.reason as Error).message}`)
+  if (model.status === 'fulfilled') snapshot.model = model.value
+  else $.ui.log(`${strings().renderFailed}: ${(model.reason as Error).message}`)
   if (wasBandOn || (await bandDefault($))) {
     await setBand($, true)
   } else {

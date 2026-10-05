@@ -452,9 +452,15 @@ async function switchSession($, sessionId) {
   if (wasBandOn)
     await stopBand($);
   snapshot.sessionId = sessionId;
-  const [usage, model] = await Promise.all([$.session.usage(), $.session.model()]);
-  applyUsage(usage);
-  snapshot.model = model;
+  const [usage, model] = await Promise.allSettled([$.session.usage(), $.session.model()]);
+  if (usage.status === "fulfilled")
+    applyUsage(usage.value);
+  else
+    $.ui.log(`${strings().renderFailed}: ${usage.reason.message}`);
+  if (model.status === "fulfilled")
+    snapshot.model = model.value;
+  else
+    $.ui.log(`${strings().renderFailed}: ${model.reason.message}`);
   if (wasBandOn || await bandDefault($)) {
     await setBand($, true);
   } else {
