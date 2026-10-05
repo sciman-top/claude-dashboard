@@ -4953,16 +4953,26 @@ function resolveRenderMode(env) {
   const requested = env.CLAUDE_DASHBOARD_SURFACE;
   return requested && SURFACES.includes(requested) ? { fromMod: true, surface: requested } : { fromMod: true };
 }
-function resolveModLayout(config, surface) {
+function resolveModLayout(config, surface, isWidget = () => true) {
   const fallback = surface === "pane" ? { displayMode: "detailed", lines: void 0 } : {};
   const value = surface === "pane" ? config.modPane : config.modBand;
-  if (!value)
-    return fallback;
-  if (NAMED_MODES.includes(value)) {
-    return { displayMode: value, lines: void 0 };
+  if (typeof value === "string") {
+    if (NAMED_MODES.includes(value)) {
+      return { displayMode: value, lines: void 0 };
+    }
+    const lines = parsePreset(value);
+    return lines.length > 0 ? { displayMode: "custom", lines } : fallback;
   }
-  const lines = parsePreset(value);
-  return lines.length > 0 ? { displayMode: "custom", lines } : fallback;
+  if (Array.isArray(value)) {
+    const lines = customLines(value, isWidget);
+    return lines.length > 0 ? { displayMode: "custom", lines } : fallback;
+  }
+  return fallback;
+}
+function customLines(value, isWidget) {
+  return value.filter((line) => Array.isArray(line)).map(
+    (line) => line.filter((id) => typeof id === "string" && isWidget(id))
+  ).filter((line) => line.length > 0);
 }
 
 // scripts/utils/band-marker.ts
@@ -5093,7 +5103,8 @@ async function main() {
     return;
   }
   if (renderMode.surface) {
-    config = { ...config, ...resolveModLayout(config, renderMode.surface) };
+    const isWidget = (id) => getWidget(id) !== void 0;
+    config = { ...config, ...resolveModLayout(config, renderMode.surface, isWidget) };
   }
   if (renderMode.fromMod) {
     config = {

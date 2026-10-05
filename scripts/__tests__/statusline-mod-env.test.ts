@@ -74,6 +74,14 @@ describe('renderer under mod env', () => {
     expect(lines[1]).toContain('42%');
   });
 
+  it('pane takes custom widget lines from modPane', () => {
+    writeConfig({ modPane: [['model'], ['context'], ['notAWidget']] });
+    const lines = run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_SURFACE: 'pane' }).split('\n').filter(Boolean);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('Opus');
+    expect(lines[1]).toContain('42%');
+  });
+
   it('band keeps the statusLine layout unless modBand is set', () => {
     writeConfig({ preset: 'M|C' });
     const band = () => run({ CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_BAND_SESSION: SID }).split('\n').filter(Boolean);

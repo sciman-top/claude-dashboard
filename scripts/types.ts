@@ -243,6 +243,9 @@ export type SeparatorStyle = 'pipe' | 'space' | 'dot' | 'arrow';
 /**
  * User configuration stored in ~/.claude/claude-dashboard.local.json
  */
+/** Layout for a dashboard mod surface: same forms as the status line (mode name, preset string, custom lines). */
+export type ModLayout = string | WidgetId[][];
+
 export interface Config {
   language: 'en' | 'ko' | 'auto';
   plan: 'pro' | 'max';
@@ -263,10 +266,10 @@ export interface Config {
    * When set, overrides displayMode with 'custom' and generates lines from the string.
    */
   preset?: string;
-  /** Dashboard mod pane layout: a display mode name or a preset string (default: detailed) */
-  modPane?: string;
-  /** Dashboard mod band layout: a display mode name or a preset string (default: the statusLine layout) */
-  modBand?: string;
+  /** Dashboard mod pane layout: a display mode name, a preset string, or widget lines (default: detailed) */
+  modPane?: ModLayout;
+  /** Dashboard mod band layout: a display mode name, a preset string, or widget lines (default: the statusLine layout) */
+  modBand?: ModLayout;
   /** Turn the dashboard mod band on when a session starts */
   modBandDefault?: boolean;
   /** Daily budget limit in USD. Enables budget tracking widget. */

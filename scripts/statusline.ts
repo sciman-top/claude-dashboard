@@ -14,13 +14,13 @@ import { readFile, stat } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
 
-import type { StdinInput, Config, WidgetContext, UsageLimits } from './types.js';
+import type { StdinInput, Config, WidgetContext, UsageLimits, WidgetId } from './types.js';
 import { DEFAULT_CONFIG, parsePreset } from './types.js';
 import { COLORS, colorize, setTheme, setSeparatorStyle } from './utils/colors.js';
 import { ICON } from './utils/emoji.js';
 import { fetchUsageLimits } from './utils/api-client.js';
 import { getTranslations } from './utils/i18n.js';
-import { formatOutput } from './widgets/index.js';
+import { formatOutput, getWidget } from './widgets/index.js';
 import { resolveRenderMode, resolveModLayout, MOD_UNAVAILABLE_WIDGETS } from './utils/render-mode.js';
 import { markBand, clearBand, isBandActive } from './utils/band-marker.js';
 
@@ -163,7 +163,8 @@ async function main(): Promise<void> {
 
   // Spread, not mutation: loadConfig() returns a cached object.
   if (renderMode.surface) {
-    config = { ...config, ...resolveModLayout(config, renderMode.surface) };
+    const isWidget = (id: string) => getWidget(id as WidgetId) !== undefined;
+    config = { ...config, ...resolveModLayout(config, renderMode.surface, isWidget) };
   }
   if (renderMode.fromMod) {
     config = {

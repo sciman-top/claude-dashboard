@@ -60,6 +60,30 @@ describe('resolveModLayout', () => {
       .toEqual({ displayMode: 'custom', lines: [['model', 'context'], ['cost']] });
   });
 
+  const known = (id: string) => ['model', 'context', 'cost', 'sessionIdFull'].includes(id);
+
+  it('accepts custom widget lines', () => {
+    expect(resolveModLayout(config({ modPane: [['model', 'context'], ['sessionIdFull']] }), 'pane', known))
+      .toEqual({ displayMode: 'custom', lines: [['model', 'context'], ['sessionIdFull']] });
+    expect(resolveModLayout(config({ modBand: [['cost']] }), 'band', known))
+      .toEqual({ displayMode: 'custom', lines: [['cost']] });
+  });
+
+  it('drops unknown widget ids and lines left empty', () => {
+    const modPane = [['model', 'nope'], ['ghost'], [42, 'cost']] as unknown as Config['modPane'];
+    expect(resolveModLayout(config({ modPane }), 'pane', known))
+      .toEqual({ displayMode: 'custom', lines: [['model'], ['cost']] });
+  });
+
+  it('falls back when custom lines leave nothing to draw', () => {
+    const modPane = [['ghost'], []] as unknown as Config['modPane'];
+    expect(resolveModLayout(config({ modPane }), 'pane', known))
+      .toEqual({ displayMode: 'detailed', lines: undefined });
+    expect(resolveModLayout(config({ modBand: [] }), 'band', known)).toEqual({});
+    const modBand = { lines: [] } as unknown as Config['modBand'];
+    expect(resolveModLayout(config({ modBand }), 'band', known)).toEqual({});
+  });
+
   it('falls back on an unparsable value', () => {
     expect(resolveModLayout(config({ modPane: '~~' }), 'pane')).toEqual({ displayMode: 'detailed', lines: undefined });
     expect(resolveModLayout(config({ modBand: '~~' }), 'band')).toEqual({});
