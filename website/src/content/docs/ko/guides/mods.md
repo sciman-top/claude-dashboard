@@ -30,6 +30,7 @@ mod는 터미널과 데스크톱 Code 탭에서만 표시됩니다. VS Code 패�
 
 - `modPane`, `modBand`에는 디스플레이 모드 이름(`compact`, `normal`, `detailed`) 또는 `"MC$R|BDO"` 같은 프리셋 문자열을 지정할 수 있습니다.
 - `"modBandDefault": true`로 설정하면 세션 시작 시 밴드가 자동으로 켜집니다.
+- 대화형 `/claude-dashboard:setup`이 mod 대시보드 사용 방식(statusLine만 / pane으로 엿보기 / band로 대체 / 둘 다)을 묻고 이 키들을 대신 써 줍니다. setup을 다시 실행해도 묻지 않은 키는 유지됩니다.
 - 테마, 언어, `disabledWidgets`는 일반 설정을 그대로 따릅니다.
 - `cacheHit`, `tokenBreakdown`, `performance`는 mod API에 요청별 캐시 사용량이 없어 패널과 밴드에서 숨겨집니다.
 
