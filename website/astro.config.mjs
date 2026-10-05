@@ -47,6 +47,7 @@ export default defineConfig({
             'guides/themes',
             'guides/configuration',
             'guides/presets',
+            'guides/mods',
           ],
         },
         {

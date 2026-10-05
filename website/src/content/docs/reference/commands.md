@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-claude-dashboard provides four commands for setup, usage checking, shell integration, and updating.
+claude-dashboard provides six commands for setup, usage checking, shell integration, and updating.
 
 ## /claude-dashboard:setup
 
@@ -128,3 +128,27 @@ status line is not updating.
 
 If `settings.json` changed, it takes effect at your next interaction with Claude Code — no
 restart is needed.
+
+## /claude-dashboard-pane
+
+Open or close a dashboard pane beside the transcript (mod, tested on Claude Code 2.1.289). Takes `on`, `off`, or no argument to flip the current state.
+
+```bash
+/claude-dashboard-pane on
+/claude-dashboard-pane off
+/claude-dashboard-pane      # no argument: flip the current state
+```
+
+Layout comes from the `modPane` config key (default `detailed`). See [Mods](/guides/mods/).
+
+## /claude-dashboard-band
+
+Draw the dashboard above the prompt and hide the status line for the current session only.
+
+```bash
+/claude-dashboard-band on
+/claude-dashboard-band off
+/claude-dashboard-band      # no argument: flip the current state
+```
+
+Layout comes from `modBand` (default: your status line layout). Set `"modBandDefault": true` to turn it on at session start. `settings.json` is never modified. See [Mods](/guides/mods/).

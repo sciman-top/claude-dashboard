@@ -6,6 +6,8 @@
  * @handbook 2.2-import-order
  * @handbook 4.6-config-caching
  * @handbook 6.1-hierarchical-defense
+ * @handbook 9.4-render-mode-env
+ * @tested scripts/__tests__/statusline-mod-env.test.ts
  */
 
 import { readFile, stat } from 'fs/promises';
@@ -19,6 +21,8 @@ import { ICON } from './utils/emoji.js';
 import { fetchUsageLimits } from './utils/api-client.js';
 import { getTranslations } from './utils/i18n.js';
 import { formatOutput } from './widgets/index.js';
+import { resolveRenderMode, resolveModLayout, MOD_UNAVAILABLE_WIDGETS } from './utils/render-mode.js';
+import { markBand, clearBand, isBandActive } from './utils/band-marker.js';
 
 // The plugin's own config, not one of Claude Code's files, so it deliberately
 // stays on homedir() rather than following CLAUDE_CONFIG_DIR: setup writes it to
@@ -121,7 +125,7 @@ function parseStdinRateLimits(stdin: StdinInput): UsageLimits | null {
  */
 async function main(): Promise<void> {
   // Load configuration
-  const config = await loadConfig();
+  let config = await loadConfig();
 
   // Initialize theme and separator
   setTheme(config.theme);
@@ -135,6 +139,37 @@ async function main(): Promise<void> {
   if (!stdin) {
     console.log(colorize(ICON.warning, COLORS.yellow));
     return;
+  }
+
+  const renderMode = resolveRenderMode(process.env);
+
+  if (renderMode.printSettings) {
+    console.log(JSON.stringify({ bandDefault: config.modBandDefault === true }));
+    return;
+  }
+
+  if (renderMode.clearSession) {
+    await clearBand(renderMode.clearSession);
+    return;
+  }
+
+  if (renderMode.markSession) {
+    await markBand(renderMode.markSession);
+  } else if (!renderMode.fromMod && stdin.session_id && (await isBandActive(stdin.session_id))) {
+    // The mod band is drawing this session's dashboard above the prompt.
+    console.log('');
+    return;
+  }
+
+  // Spread, not mutation: loadConfig() returns a cached object.
+  if (renderMode.surface) {
+    config = { ...config, ...resolveModLayout(config, renderMode.surface) };
+  }
+  if (renderMode.fromMod) {
+    config = {
+      ...config,
+      disabledWidgets: [...(config.disabledWidgets ?? []), ...MOD_UNAVAILABLE_WIDGETS],
+    };
   }
 
   // Build rate limits: prefer stdin, fallback to API

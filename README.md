@@ -165,6 +165,9 @@ i18n: English and Korean supported (auto-detect or set via setup).
   "separator": "pipe",
   "dailyBudget": 15,
   "disabledWidgets": [],
+  "modPane": "detailed",
+  "modBand": "MC$R|BDO",
+  "modBandDefault": false,
   "cache": { "ttlSeconds": 60 }
 }
 ```
@@ -189,6 +192,8 @@ Or use preset shorthand for quick configuration:
 **Tag Status:** Customize `tagStatus` patterns via `"tagPatterns": ["v*", "release-*"]`. Default is `["v*"]`. The widget auto-hides when no pattern matches a reachable tag.
 
 **Widget Toggle:** Add widget IDs to `disabledWidgets` to hide them from any display mode.
+
+**Mod Layouts:** `modPane` (the `/claude-dashboard-pane` pane, default `detailed`) and `modBand` (the `/claude-dashboard-band` band, default = your status line layout) take a display mode name (`compact` / `normal` / `detailed`) or a preset string like `"MC$R|BDO"`. Set `"modBandDefault": true` to turn the band on at session start. See [Mods](#mods-pane--band).
 
 **Color Legend:** 🟢 0-50% Safe / 🟡 51-80% Warning / 🔴 81-100% Critical
 
@@ -235,6 +240,28 @@ status line stops updating.
 ```bash
 /claude-dashboard:update
 ```
+
+## Mods (pane & band)
+
+claude-dashboard also ships as a Claude Code **mod** (function-hook plugin, early access, tested on Claude Code 2.1.289). It is bundled in the same plugin (`hooks/hooks.json` → `"modules": ["../dist/mod.js"]`), so there is nothing extra to install. Mods are drawn only in the terminal and the desktop Code tab (not the VS Code panel, not `claude -p`).
+
+| Command | What it does |
+|---------|--------------|
+| `/claude-dashboard-pane [on\|off]` | Open or close a dashboard pane beside the transcript (no argument flips it). Layout from `modPane` (default `detailed`). |
+| `/claude-dashboard-band [on\|off]` | Draw the dashboard above the prompt and hide the status line for **this session only** (`settings.json` is untouched). Layout from `modBand` (default = your status line layout). |
+
+```json
+{
+  "modPane": "detailed",
+  "modBand": "MC$R|BDO",
+  "modBandDefault": true
+}
+```
+
+- `modPane` / `modBand` accept a display mode name (`compact` / `normal` / `detailed`) or a preset string. `modBandDefault: true` turns the band on at session start.
+- **How hiding works:** the band writes a per-session heartbeat marker (`~/.cache/claude-dashboard/band-<sessionId>`), refreshed on every render (at most every 60s) and ignored after 180s. It is deleted on `off` and at session end, so if the mod stops the status line comes back by itself within 3 minutes.
+- Theme, language, and `disabledWidgets` follow your normal config. `cacheHit`, `tokenBreakdown`, and `performance` are hidden in the pane and band (the mod API has no per-request cache usage).
+- Data comes from the mod API (context, rate limits, and cost pushed by Claude Code) and the unchanged renderer `dist/index.js`, run as a subprocess.
 
 ## Troubleshooting
 
