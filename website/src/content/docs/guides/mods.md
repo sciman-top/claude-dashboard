@@ -28,7 +28,7 @@ Mods are drawn only in the terminal and the desktop Code tab. They do not appear
 }
 ```
 
-- `modPane` and `modBand` accept a display mode name (`compact`, `normal`, `detailed`) or a preset string such as `"MC$R|BDO"`.
+- `modPane` and `modBand` accept a display mode name (`compact`, `normal`, `detailed`), a preset string such as `"MC$R|BDO"`, or custom widget lines such as `[["model", "context"], ["sessionIdFull"]]` — the same form as the status line's `lines`, so widgets without a preset character work too. Unknown widget ids are dropped; if nothing is left, the default is used.
 - `"modBandDefault": true` turns the band on at session start.
 - Interactive `/claude-dashboard:setup` asks how you want to use the mod dashboard (status line only, peek with pane, replace with band, or both) and writes these keys for you; rerunning setup keeps keys it does not ask about.
 - Theme, language, and `disabledWidgets` follow your normal configuration.
