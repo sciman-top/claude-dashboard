@@ -501,7 +501,11 @@ function register(on) {
   });
   on("session.measure", async ($, e, next) => {
     applyUsage(e);
-    snapshot.model = await $.session.model();
+    try {
+      snapshot.model = await $.session.model();
+    } catch (err) {
+      $.ui.log(`${strings().renderFailed}: ${err.message}`);
+    }
     void requestRefresh($);
     return next(e);
   });
@@ -540,6 +544,7 @@ function register(on) {
   on("session.end", async ($, e, next) => {
     if (isBandOn)
       await stopBand($);
+    syncTicker($);
     return next(e);
   });
 }

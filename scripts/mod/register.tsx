@@ -272,7 +272,12 @@ export function register(on: Parameters<Register>[0]) {
 
   on('session.measure', async ($, e, next) => {
     applyUsage(e)
-    snapshot.model = await $.session.model()
+    try {
+      snapshot.model = await $.session.model()
+    } catch (err) {
+      // Keep the last known model; the refresh below must still run.
+      $.ui.log(`${strings().renderFailed}: ${(err as Error).message}`)
+    }
     void requestRefresh($)
     return next(e)
   })
@@ -314,6 +319,7 @@ export function register(on: Parameters<Register>[0]) {
   on('session.end', async ($, e, next) => {
     // Give statusLine back now rather than after the marker TTL.
     if (isBandOn) await stopBand($)
+    syncTicker($)
     return next(e)
   })
 }
