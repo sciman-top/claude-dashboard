@@ -245,7 +245,7 @@ Preset characters: `M`=model, `C`=context, `b`=contextBar, `%`=contextPercentage
 }
 ```
 
-**Mod keys**: `"modPane"` (layout of the `/claude-dashboard-pane` pane, display mode name or preset string, default `detailed`) and `"modBandDefault"` (`true` turns the band on at session start) are set from Turn 4. `"modBand"` (layout of the `/claude-dashboard-band` band, same format, default = status line layout) is not asked — write it only if the user requests a band layout different from the status line.
+**Mod keys**: `"modPane"` (layout of the `/claude-dashboard-pane` pane: display mode name, preset string, or custom widget lines like `[["model","context"],["sessionIdFull"]]`; default `detailed`) and `"modBandDefault"` (`true` turns the band on at session start) are set from Turn 4. `"modBand"` (layout of the `/claude-dashboard-band` band, same format, default = status line layout) is not asked — write it only if the user requests a band layout different from the status line.
 
 **Note**: Omit `"disabledWidgets"` field entirely if user chose not to hide any widgets. Omit `"dailyBudget"` if not using budget tracking. Omit `"tagPatterns"` to use the default `["v*"]`. Omit `"separator"` if using default pipe style.
 
