@@ -13,10 +13,10 @@ Mods are drawn only in the terminal and the desktop Code tab. They do not appear
 
 | Command | What it does |
 |---------|--------------|
-| `/dashboard` | Toggle a dashboard pane beside the transcript. Layout from `modPane` (default `detailed`). |
-| `/dashboard-band on\|off` | Draw the dashboard above the prompt and hide the status line for **this session only**. Layout from `modBand` (default: your status line layout). |
+| `/claude-dashboard-pane` | Toggle a dashboard pane beside the transcript. Layout from `modPane` (default `detailed`). |
+| `/claude-dashboard-band on\|off` | Draw the dashboard above the prompt and hide the status line for **this session only**. Layout from `modBand` (default: your status line layout). |
 
-`/dashboard-band` never touches `settings.json` and applies to the current session only.
+`/claude-dashboard-band` never touches `settings.json` and applies to the current session only.
 
 ## Configuration
 
@@ -35,7 +35,7 @@ Mods are drawn only in the terminal and the desktop Code tab. They do not appear
 
 ## How hiding works
 
-While the band is on, it writes a per-session heartbeat marker at `~/.cache/claude-dashboard/band-<sessionId>`. The marker is refreshed on every render (at most every 60 seconds) and ignored after 180 seconds. It is deleted on `/dashboard-band off` and when the session ends. If the mod stops for any reason, the status line returns by itself within 3 minutes.
+While the band is on, it writes a per-session heartbeat marker at `~/.cache/claude-dashboard/band-<sessionId>`. The marker is refreshed on every render (at most every 60 seconds) and ignored after 180 seconds. It is deleted on `/claude-dashboard-band off` and when the session ends. If the mod stops for any reason, the status line returns by itself within 3 minutes.
 
 ## Where the data comes from
 

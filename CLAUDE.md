@@ -29,7 +29,7 @@ claude-dashboard/
 │   ├── statusline.ts        # Main entry point (status line)
 │   ├── check-usage.ts       # CLI usage dashboard entry point
 │   ├── mod/
-│   │   ├── register.tsx     # Mod entry: /dashboard pane + /dashboard-band band
+│   │   ├── register.tsx     # Mod entry: /claude-dashboard-pane pane + /claude-dashboard-band band
 │   │   ├── stdin-builder.ts # Builds renderer stdin from mod API state
 │   │   └── ansi.ts          # ANSI parser for mod rendering
 │   ├── types.ts             # TypeScript interfaces
@@ -91,7 +91,7 @@ claude-dashboard/
 ├── dist/
 │   ├── index.js             # Status line built output (committed)
 │   ├── check-usage.js       # CLI usage dashboard built output (committed)
-│   └── mod.js               # Mod (/dashboard, /dashboard-band) built output (committed)
+│   └── mod.js               # Mod (/claude-dashboard-pane, /claude-dashboard-band) built output (committed)
 └── package.json
 ```
 
@@ -369,7 +369,7 @@ Before committing:
 
 1. Edit `scripts/mod/register.tsx` (config keys `modPane` / `modBand` / `modBandDefault` live in `scripts/types.ts`)
 2. `npm run build && claude plugin validate .` (validate also reports a pre-existing reserved-name error for "claude-dashboard"; ignore it)
-3. Real-render check: `claude --plugin-dir .`, then `/dashboard` and `/dashboard-band on`
+3. Real-render check: `claude --plugin-dir .`, then `/claude-dashboard-pane` and `/claude-dashboard-band on`
 4. Constraints: helpers that take `$` must be top-level function declarations; atom plugin/key and ui matchers must be string literals; `export function register`; no minify
 
 ## Cache Architecture

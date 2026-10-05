@@ -193,7 +193,7 @@ Or use preset shorthand for quick configuration:
 
 **Widget Toggle:** Add widget IDs to `disabledWidgets` to hide them from any display mode.
 
-**Mod Layouts:** `modPane` (the `/dashboard` pane, default `detailed`) and `modBand` (the `/dashboard-band` band, default = your status line layout) take a display mode name (`compact` / `normal` / `detailed`) or a preset string like `"MC$R|BDO"`. Set `"modBandDefault": true` to turn the band on at session start. See [Mods](#mods-pane--band).
+**Mod Layouts:** `modPane` (the `/claude-dashboard-pane` pane, default `detailed`) and `modBand` (the `/claude-dashboard-band` band, default = your status line layout) take a display mode name (`compact` / `normal` / `detailed`) or a preset string like `"MC$R|BDO"`. Set `"modBandDefault": true` to turn the band on at session start. See [Mods](#mods-pane--band).
 
 **Color Legend:** 🟢 0-50% Safe / 🟡 51-80% Warning / 🔴 81-100% Critical
 
@@ -247,8 +247,8 @@ claude-dashboard also ships as a Claude Code **mod** (function-hook plugin, earl
 
 | Command | What it does |
 |---------|--------------|
-| `/dashboard` | Toggle a dashboard pane beside the transcript. Layout from `modPane` (default `detailed`). |
-| `/dashboard-band on\|off` | Draw the dashboard above the prompt and hide the status line for **this session only** (`settings.json` is untouched). Layout from `modBand` (default = your status line layout). |
+| `/claude-dashboard-pane` | Toggle a dashboard pane beside the transcript. Layout from `modPane` (default `detailed`). |
+| `/claude-dashboard-band on\|off` | Draw the dashboard above the prompt and hide the status line for **this session only** (`settings.json` is untouched). Layout from `modBand` (default = your status line layout). |
 
 ```json
 {

@@ -971,7 +971,7 @@ var en_default = {
     paneClosed: "Dashboard pane closed.",
     bandOn: "Dashboard band on \u2014 statusLine hidden for this session (terminal/desktop only).",
     bandOff: "Dashboard band off \u2014 statusLine restored.",
-    bandUsage: "Usage: /dashboard-band on|off",
+    bandUsage: "Usage: /claude-dashboard-band on|off",
     renderFailed: "Dashboard render failed"
   }
 };
@@ -1042,7 +1042,7 @@ var ko_default = {
     paneClosed: "\uB300\uC2DC\uBCF4\uB4DC \uD328\uB110\uC744 \uB2EB\uC558\uC2B5\uB2C8\uB2E4.",
     bandOn: "\uB300\uC2DC\uBCF4\uB4DC \uBC34\uB4DC \uCF1C\uC9D0 \u2014 \uC774 \uC138\uC158\uC758 statusLine\uC744 \uC228\uAE41\uB2C8\uB2E4 (\uD130\uBBF8\uB110/\uB370\uC2A4\uD06C\uD1B1 \uC804\uC6A9).",
     bandOff: "\uB300\uC2DC\uBCF4\uB4DC \uBC34\uB4DC \uAEBC\uC9D0 \u2014 statusLine\uC744 \uBCF5\uC6D0\uD588\uC2B5\uB2C8\uB2E4.",
-    bandUsage: "\uC0AC\uC6A9\uBC95: /dashboard-band on|off",
+    bandUsage: "\uC0AC\uC6A9\uBC95: /claude-dashboard-band on|off",
     renderFailed: "\uB300\uC2DC\uBCF4\uB4DC \uB80C\uB354 \uC2E4\uD328"
   }
 };

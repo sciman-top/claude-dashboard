@@ -13,10 +13,10 @@ mod는 터미널과 데스크톱 Code 탭에서만 표시됩니다. VS Code 패�
 
 | 명령어 | 동작 |
 |--------|------|
-| `/dashboard` | 대화 기록 옆에 대시보드 패널을 켜고 끕니다. 레이아웃은 `modPane`(기본값 `detailed`)을 따릅니다. |
-| `/dashboard-band on\|off` | 프롬프트 위에 대시보드를 표시하고 **현재 세션에서만** statusLine을 숨깁니다. 레이아웃은 `modBand`(기본값: statusLine 레이아웃)를 따릅니다. |
+| `/claude-dashboard-pane` | 대화 기록 옆에 대시보드 패널을 켜고 끕니다. 레이아웃은 `modPane`(기본값 `detailed`)을 따릅니다. |
+| `/claude-dashboard-band on\|off` | 프롬프트 위에 대시보드를 표시하고 **현재 세션에서만** statusLine을 숨깁니다. 레이아웃은 `modBand`(기본값: statusLine 레이아웃)를 따릅니다. |
 
-`/dashboard-band`는 `settings.json`을 수정하지 않으며 현재 세션에만 적용됩니다.
+`/claude-dashboard-band`는 `settings.json`을 수정하지 않으며 현재 세션에만 적용됩니다.
 
 ## 설정
 
@@ -35,7 +35,7 @@ mod는 터미널과 데스크톱 Code 탭에서만 표시됩니다. VS Code 패�
 
 ## statusLine이 숨겨지는 방식
 
-밴드가 켜져 있는 동안 세션별 하트비트 마커(`~/.cache/claude-dashboard/band-<sessionId>`)를 기록합니다. 마커는 렌더링할 때마다(최대 60초 간격) 갱신되며 180초가 지나면 무시됩니다. `/dashboard-band off`를 실행하거나 세션이 끝나면 삭제됩니다. 따라서 모드가 어떤 이유로든 멈추더라도 3분 이내에 statusLine이 자동으로 돌아옵니다.
+밴드가 켜져 있는 동안 세션별 하트비트 마커(`~/.cache/claude-dashboard/band-<sessionId>`)를 기록합니다. 마커는 렌더링할 때마다(최대 60초 간격) 갱신되며 180초가 지나면 무시됩니다. `/claude-dashboard-band off`를 실행하거나 세션이 끝나면 삭제됩니다. 따라서 모드가 어떤 이유로든 멈추더라도 3분 이내에 statusLine이 자동으로 돌아옵니다.
 
 ## 데이터 출처
 

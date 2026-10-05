@@ -126,17 +126,17 @@ statusLine shim을 복구하거나 상태를 확인합니다 (보통은 자동�
 
 `settings.json`이 변경된 경우 다음 상호작용부터 바로 적용됩니다 — 재시작은 필요하지 않습니다.
 
-## /dashboard
+## /claude-dashboard-pane
 
 대화 기록 옆에 대시보드 패널을 켜고 끕니다 (mod, Claude Code 2.1.289에서 확인). 레이아웃은 `modPane` 설정(기본값 `detailed`)을 따릅니다. 자세한 내용은 [모드](/ko/guides/mods/)를 참고하세요.
 
-## /dashboard-band
+## /claude-dashboard-band
 
 프롬프트 위에 대시보드를 표시하고, 현재 세션에서만 statusLine을 숨깁니다.
 
 ```bash
-/dashboard-band on
-/dashboard-band off
+/claude-dashboard-band on
+/claude-dashboard-band off
 ```
 
 레이아웃은 `modBand`(기본값: statusLine 레이아웃)를 따릅니다. `"modBandDefault": true`를 설정하면 세션 시작 시 자동으로 켜집니다. `settings.json`은 수정되지 않습니다. 자세한 내용은 [모드](/ko/guides/mods/)를 참고하세요.

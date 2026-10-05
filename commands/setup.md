@@ -235,7 +235,7 @@ Preset characters: `M`=model, `C`=context, `b`=contextBar, `%`=contextPercentage
 }
 ```
 
-**Mod layout keys (optional, not asked by setup)**: `"modPane"` (layout of the `/dashboard` pane, display mode name or preset string, default `detailed`), `"modBand"` (layout of the `/dashboard-band` band, same format, default = status line layout), `"modBandDefault"` (`true` turns the band on at session start). Leave them out unless the user asks.
+**Mod layout keys (optional, not asked by setup)**: `"modPane"` (layout of the `/claude-dashboard-pane` pane, display mode name or preset string, default `detailed`), `"modBand"` (layout of the `/claude-dashboard-band` band, same format, default = status line layout), `"modBandDefault"` (`true` turns the band on at session start). Leave them out unless the user asks.
 
 **Note**: Omit `"disabledWidgets"` field entirely if user chose not to hide any widgets. Omit `"dailyBudget"` if not using budget tracking. Omit `"tagPatterns"` to use the default `["v*"]`. Omit `"separator"` if using default pipe style.
 
@@ -316,4 +316,4 @@ have hooks disabled or the status line is not updating.
 - The status line will update on the next message
 - To change settings later, run this command again
 - Custom mode allows full control over which widgets appear on each line
-- Mods (tested on Claude Code 2.1.289): `/dashboard` toggles a pane beside the transcript; `/dashboard-band on|off` draws the dashboard above the prompt and hides the status line for the current session only
+- Mods (tested on Claude Code 2.1.289): `/claude-dashboard-pane` toggles a pane beside the transcript; `/claude-dashboard-band on|off` draws the dashboard above the prompt and hides the status line for the current session only

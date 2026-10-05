@@ -1,7 +1,7 @@
 /**
  * claude-dashboard mod: runs the unchanged renderer (dist/index.js) as a subprocess with a
- * statusLine-shaped stdin built from mod data, and draws its lines in a Pane (/dashboard)
- * or above the prompt (/dashboard-band), where it stands in for this session's statusLine.
+ * statusLine-shaped stdin built from mod data, and draws its lines in a Pane (/claude-dashboard-pane)
+ * or above the prompt (/claude-dashboard-band), where it stands in for this session's statusLine.
  * Exported as a function declaration: the engine's validator reads the built dist/mod.js
  * literally and refuses `var register = …`, which an arrow export compiles to.
  * @handbook 9.1-mod-renderer-subprocess
@@ -222,7 +222,7 @@ function drawLines(Box: any, Text: any, lines: Segment[][]) {
 
 export function register(on: Parameters<Register>[0]) {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'dashboard', description: 'Toggle the claude-dashboard pane' })
+    await $.command.register({ name: 'claude-dashboard-pane', description: 'Toggle the claude-dashboard pane' })
     // session.start is awaited before the first prompt: fetch the independent reads together.
     const [id, model, cwd, root, version, usage] = await Promise.all([
       $.session.id(),
@@ -235,7 +235,7 @@ export function register(on: Parameters<Register>[0]) {
     Object.assign(snapshot, { sessionId: id, model, cwd, root, version: version.version })
     applyUsage(usage)
     await $.command.register({
-      name: 'dashboard-band',
+      name: 'claude-dashboard-band',
       description: 'Show the dashboard above the prompt instead of the statusLine (on|off)',
     })
     if (await bandDefault($)) await setBand($, true)
@@ -259,7 +259,7 @@ export function register(on: Parameters<Register>[0]) {
     return next(e)
   })
 
-  on('command.run', { command: 'dashboard' }, async $ => {
+  on('command.run', { command: 'claude-dashboard-pane' }, async $ => {
     if (isPaneOpen) {
       isPaneOpen = false
       await $.ui.close({ id: PANE })
@@ -279,7 +279,7 @@ export function register(on: Parameters<Register>[0]) {
     return next(e)
   })
 
-  on('command.run', { command: 'dashboard-band' }, async ($, e) => {
+  on('command.run', { command: 'claude-dashboard-band' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
     if (arg !== 'on' && arg !== 'off') return { text: strings().bandUsage }
     await setBand($, arg === 'on')
