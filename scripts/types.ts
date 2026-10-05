@@ -240,12 +240,12 @@ export type ThemeId = 'default' | 'minimal' | 'catppuccin' | 'catppuccinLatte' |
  */
 export type SeparatorStyle = 'pipe' | 'space' | 'dot' | 'arrow';
 
-/**
- * User configuration stored in ~/.claude/claude-dashboard.local.json
- */
 /** Layout for a dashboard mod surface: same forms as the status line (mode name, preset string, custom lines). */
 export type ModLayout = string | WidgetId[][];
 
+/**
+ * User configuration stored in ~/.claude/claude-dashboard.local.json
+ */
 export interface Config {
   language: 'en' | 'ko' | 'auto';
   plan: 'pro' | 'max';
