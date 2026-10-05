@@ -30,6 +30,7 @@ Mods are drawn only in the terminal and the desktop Code tab. They do not appear
 
 - `modPane` and `modBand` accept a display mode name (`compact`, `normal`, `detailed`) or a preset string such as `"MC$R|BDO"`.
 - `"modBandDefault": true` turns the band on at session start.
+- Interactive `/claude-dashboard:setup` asks how you want to use the mod dashboard (status line only, peek with pane, replace with band, or both) and writes these keys for you; rerunning setup keeps keys it does not ask about.
 - Theme, language, and `disabledWidgets` follow your normal configuration.
 - `cacheHit`, `tokenBreakdown`, and `performance` are hidden in the pane and band, because the mod API has no per-request cache usage.
 

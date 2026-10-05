@@ -259,6 +259,7 @@ claude-dashboard also ships as a Claude Code **mod** (function-hook plugin, earl
 ```
 
 - `modPane` / `modBand` accept a display mode name (`compact` / `normal` / `detailed`) or a preset string. `modBandDefault: true` turns the band on at session start.
+- Interactive `/claude-dashboard:setup` asks how you want to use the mod dashboard (status line only, peek with pane, replace with band, or both) and writes these keys; rerunning setup keeps keys it does not ask about.
 - **How hiding works:** the band writes a per-session heartbeat marker (`~/.cache/claude-dashboard/band-<sessionId>`), refreshed on every render (at most every 60s) and ignored after 180s. It is deleted on `off` and at session end, so if the mod stops the status line comes back by itself within 3 minutes.
 - Theme, language, and `disabledWidgets` follow your normal config. `cacheHit`, `tokenBreakdown`, and `performance` are hidden in the pane and band (the mod API has no per-request cache usage).
 - Data comes from the mod API (context, rate limits, and cost pushed by Claude Code) and the unchanged renderer `dist/index.js`, run as a subprocess.
