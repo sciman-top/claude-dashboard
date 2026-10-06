@@ -175,7 +175,8 @@ async function drainRefreshes($: EngineInterface) {
   }
 }
 
-// Settings live in the dashboard config, which only the Node renderer reads.
+// Settings live in the dashboard config, which only the Node renderer reads. On a host without node
+// on PATH this is the first run, so it also pays the one-time node lookup (an rc-sourcing shell).
 async function bandDefault($: EngineInterface): Promise<boolean> {
   try {
     const run = await runRenderer($, { CLAUDE_DASHBOARD_MOD_SETTINGS: '1' })

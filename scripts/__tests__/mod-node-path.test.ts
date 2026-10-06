@@ -21,9 +21,15 @@ describe('isMissingExecutable', () => {
 });
 
 describe('parseNodePath', () => {
-  it('takes the last absolute path past rc-file banners', () => {
-    expect(parseNodePath('Welcome!\n/usr/bin/node\n/home/u/.nvm/versions/node/v24.1.0/bin/node\n'))
-      .toBe('/home/u/.nvm/versions/node/v24.1.0/bin/node');
+  it('takes the single path the shell answered', () => {
+    expect(parseNodePath('/usr/bin/node\n')).toBe('/usr/bin/node');
+  });
+
+  it('picks the highest nvm version by semver, not glob order', () => {
+    const v9 = '/h/.nvm/versions/node/v9.11.2/bin/node';
+    const v20 = '/h/.nvm/versions/node/v20.0.0/bin/node';
+    const v20_1 = '/h/.nvm/versions/node/v20.1.0/bin/node';
+    expect(parseNodePath(`${v20}\n${v20_1}\n${v9}\n`)).toBe(v20_1);
   });
 
   it('returns null without a path', () => {
@@ -48,19 +54,24 @@ describe('NODE_LOOKUP_SCRIPT', () => {
   }
 
   // No shell that can answer (SHELL unset, PATH without bash/zsh): only the install-path globs run.
-  function lookUp(): string {
-    return execFileSync('/bin/sh', ['-c', NODE_LOOKUP_SCRIPT], {
+  function lookUp(): string | null {
+    return parseNodePath(execFileSync('/bin/sh', ['-c', NODE_LOOKUP_SCRIPT], {
       env: { HOME: home!, PATH: '/nonexistent' },
       encoding: 'utf8',
-    }).trim();
+    }));
   }
 
   it.skipIf(process.platform === 'win32')('falls back to the highest nvm version', () => {
     home = mkdtempSync(path.join(tmpdir(), 'node-lookup-'));
-    fakeNode('.nvm/versions/node/v20.0.0/bin/node');
+    fakeNode('.nvm/versions/node/v9.11.2/bin/node');
     const latest = fakeNode('.nvm/versions/node/v24.17.0/bin/node');
     fakeNode('.volta/bin/node');
     expect(lookUp()).toBe(latest);
+  });
+
+  it.skipIf(process.platform === 'win32')('exits non-zero when no node is found', () => {
+    home = mkdtempSync(path.join(tmpdir(), 'node-lookup-'));
+    expect(() => lookUp()).toThrow();
   });
 
   it.skipIf(process.platform === 'win32')('uses other install paths without nvm', () => {
