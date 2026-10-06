@@ -294,10 +294,48 @@ function buildStdin(s, now = Date.now()) {
   return stdin;
 }
 
+// scripts/mod/node-path.ts
+var NODE_LOOKUP_SCRIPT = `
+tried=
+for s in "$SHELL" bash zsh; do
+  [ -n "$s" ] && s=$(command -v "$s" 2>/dev/null) || continue
+  case " $tried " in *" $s "*) continue ;; esac
+  tried="$tried $s"
+  p=$("$s" -lic 'command -v node' </dev/null 2>/dev/null | tail -n 1)
+  case "$p" in /*) [ -x "$p" ] && { echo "$p"; exit 0; } ;; esac
+done
+found=
+for p in "$HOME"/.nvm/versions/node/*/bin/node; do [ -x "$p" ] && { echo "$p"; found=1; }; done
+[ -n "$found" ] && exit 0
+for p in "$HOME"/.local/share/fnm/aliases/default/bin/node "$HOME"/.volta/bin/node \\
+         "$HOME"/.asdf/shims/node /opt/homebrew/bin/node /usr/local/bin/node; do
+  [ -x "$p" ] && { echo "$p"; exit 0; }
+done
+exit 1
+`;
+function isMissingExecutable(err) {
+  return err instanceof Error && /\bENOENT\b/.test(err.message);
+}
+var NVM_VERSION = /\/v(\d+)\.(\d+)\.(\d+)\/bin\/node$/;
+function nvmVersion(nodePath) {
+  return NVM_VERSION.exec(nodePath)?.slice(1).map(Number) ?? [-1, -1, -1];
+}
+function isNewer(a, b) {
+  const i = a.findIndex((n, k) => n !== b[k]);
+  return i !== -1 && a[i] > b[i];
+}
+function parseNodePath(stdout) {
+  const paths = stdout.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("/"));
+  if (paths.length === 0)
+    return null;
+  return paths.reduce((best, p) => isNewer(nvmVersion(p), nvmVersion(best)) ? p : best);
+}
+
 // scripts/mod/register.tsx
 var PANE = "claude-dashboard";
 var TICK_MS = 6e4;
 var RUN_TIMEOUT_MS = 5e3;
+var NODE_LOOKUP_TIMEOUT_MS = 1e4;
 var paneLines = atom({ plugin: "claude-dashboard", key: "paneLines" }, []);
 var bandLines = atom({ plugin: "claude-dashboard", key: "bandLines" }, []);
 var BAND_SURFACES = /* @__PURE__ */ new Set(["terminal", "desktop"]);
@@ -317,13 +355,36 @@ var isPaneOpen = false;
 var isBandOn = false;
 var bandRuns = /* @__PURE__ */ new Set();
 var ticker = null;
+var nodeCommand = "node";
+var nodeLookup = null;
+async function lookUpNode($) {
+  try {
+    const run = await $.process.run(["sh", "-c", NODE_LOOKUP_SCRIPT], { timeoutMs: NODE_LOOKUP_TIMEOUT_MS });
+    return run.exitCode === 0 ? parseNodePath(run.stdout) : null;
+  } catch (err) {
+    $.ui.log(`${strings().renderFailed}: node lookup: ${err.message}`, { to: "debug" });
+    return null;
+  }
+}
+async function runRenderer($, env) {
+  const argv = (node) => [node, `${$.plugin.root}/dist/index.js`];
+  const init = { stdin: JSON.stringify(buildStdin(snapshot)), env: { CLAUDE_DASHBOARD_MOD: "1", ...env }, timeoutMs: RUN_TIMEOUT_MS };
+  try {
+    return await $.process.run(argv(nodeCommand), init);
+  } catch (err) {
+    if (nodeCommand !== "node" || !isMissingExecutable(err))
+      throw err;
+    nodeLookup ??= lookUpNode($);
+    const found = await nodeLookup;
+    if (!found)
+      throw err;
+    nodeCommand = found;
+    return await $.process.run(argv(found), init);
+  }
+}
 async function renderLines($, env) {
   try {
-    const run = await $.process.run(["node", `${$.plugin.root}/dist/index.js`], {
-      stdin: JSON.stringify(buildStdin(snapshot)),
-      env: { CLAUDE_DASHBOARD_MOD: "1", ...env },
-      timeoutMs: RUN_TIMEOUT_MS
-    });
+    const run = await runRenderer($, env);
     if (run.exitCode !== 0) {
       $.ui.log(`${strings().renderFailed}: exit ${run.exitCode} ${run.stderr.slice(0, 200)}`);
       return null;
@@ -396,11 +457,7 @@ async function drainRefreshes($) {
 }
 async function bandDefault($) {
   try {
-    const run = await $.process.run(["node", `${$.plugin.root}/dist/index.js`], {
-      stdin: JSON.stringify(buildStdin(snapshot)),
-      env: { CLAUDE_DASHBOARD_MOD: "1", CLAUDE_DASHBOARD_MOD_SETTINGS: "1" },
-      timeoutMs: RUN_TIMEOUT_MS
-    });
+    const run = await runRenderer($, { CLAUDE_DASHBOARD_MOD_SETTINGS: "1" });
     return run.exitCode === 0 && JSON.parse(run.stdout).bandDefault === true;
   } catch (err) {
     $.ui.log(`${strings().renderFailed}: ${err.message}`);
