@@ -15,10 +15,13 @@ import ko from '../../locales/ko.json'
 import { parseAnsi, type Segment } from './ansi'
 import { resolveToggle } from './toggle'
 import { buildStdin, type ModRateLimit, type ModSnapshot } from './stdin-builder'
+import { isMissingExecutable, NODE_LOOKUP_SCRIPT, parseNodePath } from './node-path'
 
 const PANE = 'claude-dashboard'
 const TICK_MS = 60_000
 const RUN_TIMEOUT_MS = 5_000
+// An interactive shell sourcing nvm can be slow; this runs once per session at most.
+const NODE_LOOKUP_TIMEOUT_MS = 10_000
 
 const paneLines = atom({ plugin: 'claude-dashboard', key: 'paneLines' } as const, [] as Segment[][])
 const bandLines = atom({ plugin: 'claude-dashboard', key: 'bandLines' } as const, [] as Segment[][])
@@ -54,14 +57,39 @@ let isBandOn = false
 const bandRuns = new Set<Promise<void>>()
 let ticker: Timer | null = null
 
+// 'node' off PATH until it fails to start; then the looked-up path, shared by concurrent runs.
+let nodeCommand = 'node'
+let nodeLookup: Promise<string | null> | null = null
+
 // Helpers that take $ are top-level declarations: the engine's validator follows $ only into those.
+async function lookUpNode($: EngineInterface): Promise<string | null> {
+  try {
+    const run = await $.process.run(['sh', '-c', NODE_LOOKUP_SCRIPT], { timeoutMs: NODE_LOOKUP_TIMEOUT_MS })
+    return run.exitCode === 0 ? parseNodePath(run.stdout) : null
+  } catch (err) {
+    $.ui.log(`${strings().renderFailed}: node lookup: ${(err as Error).message}`, { to: 'debug' })
+    return null
+  }
+}
+
+async function runRenderer($: EngineInterface, env: Record<string, string>) {
+  const argv = (node: string) => [node, `${$.plugin.root}/dist/index.js`]
+  const init = { stdin: JSON.stringify(buildStdin(snapshot)), env: { CLAUDE_DASHBOARD_MOD: '1', ...env }, timeoutMs: RUN_TIMEOUT_MS }
+  try {
+    return await $.process.run(argv(nodeCommand), init)
+  } catch (err) {
+    if (nodeCommand !== 'node' || !isMissingExecutable(err)) throw err
+    nodeLookup ??= lookUpNode($)
+    const found = await nodeLookup
+    if (!found) throw err
+    nodeCommand = found
+    return await $.process.run(argv(found), init)
+  }
+}
+
 async function renderLines($: EngineInterface, env: Record<string, string>): Promise<Segment[][] | null> {
   try {
-    const run = await $.process.run(['node', `${$.plugin.root}/dist/index.js`], {
-      stdin: JSON.stringify(buildStdin(snapshot)),
-      env: { CLAUDE_DASHBOARD_MOD: '1', ...env },
-      timeoutMs: RUN_TIMEOUT_MS,
-    })
+    const run = await runRenderer($, env)
     if (run.exitCode !== 0) {
       $.ui.log(`${strings().renderFailed}: exit ${run.exitCode} ${run.stderr.slice(0, 200)}`)
       return null
@@ -150,11 +178,7 @@ async function drainRefreshes($: EngineInterface) {
 // Settings live in the dashboard config, which only the Node renderer reads.
 async function bandDefault($: EngineInterface): Promise<boolean> {
   try {
-    const run = await $.process.run(['node', `${$.plugin.root}/dist/index.js`], {
-      stdin: JSON.stringify(buildStdin(snapshot)),
-      env: { CLAUDE_DASHBOARD_MOD: '1', CLAUDE_DASHBOARD_MOD_SETTINGS: '1' },
-      timeoutMs: RUN_TIMEOUT_MS,
-    })
+    const run = await runRenderer($, { CLAUDE_DASHBOARD_MOD_SETTINGS: '1' })
     return run.exitCode === 0 && JSON.parse(run.stdout).bandDefault === true
   } catch (err) {
     $.ui.log(`${strings().renderFailed}: ${(err as Error).message}`)
