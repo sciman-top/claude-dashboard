@@ -53,6 +53,7 @@ const CLEANABLE_PREFIXES = [
   'antigravity-token-',
   'zai-usage-',
   'transcript-',
+  'band-',
 ];
 
 let lastCleanupTime = 0;

@@ -162,13 +162,23 @@ Single AskUserQuestion call (not multi-select) asking: "Line `N` has `[widget1, 
 - Options: No (recommended), Yes
 - If "Yes": ask which widgets to hide (multi-select from available widgets)
 
+**Turn 4** — Ask: "How do you want to use the mod dashboard?" (single select; the mod commands work in every case — this only sets defaults). Include a short `markdown` preview on each option:
+- **Status line only (recommended)** — keep using the status line; `/claude-dashboard-pane` and `/claude-dashboard-band` stay available on demand. Removes `modBandDefault`.
+- **Peek with pane** — keep the status line lean and open the full dashboard with `/claude-dashboard-pane` when needed (e.g. widgets left out of the status line). Writes `"modPane": "detailed"` if `modPane` is not set yet, removes `modBandDefault`.
+- **Replace with band** — draw the dashboard above the prompt at session start and hide the status line for that session. Writes `"modBandDefault": true`.
+- **Both** — band at session start, plus the full dashboard in the pane on demand. Writes `"modBandDefault": true`, and `"modPane": "detailed"` if `modPane` is not set yet.
+
+Turn 4 owns `modBandDefault`: always write or remove it as the chosen option says, so a rerun that switches back to "Status line only" or "Peek with pane" actually stops the band at session start instead of the merge rule below keeping an old `"modBandDefault": true`. Never remove or overwrite an existing `modPane` (the user may have set a custom pane layout; it only applies when the pane is opened) or `modBand`.
+
+If the user picks band or both, tell them: the band draws in the terminal and the desktop Code tab only (VS Code and `claude -p` keep the status line), and `/claude-dashboard-band off` brings the status line back for the current session.
+
 **If arguments provided (direct mode):**
 
 Use the provided arguments directly.
 
 ### 2. Create configuration file
 
-Create `~/.claude/claude-dashboard.local.json`:
+Write `~/.claude/claude-dashboard.local.json`. **If the file already exists, read it first and keep every key this command does not set** (e.g. `tagPatterns`, `dailyBudget`, `modBand`; `modBandDefault` only in direct mode, where Turn 4 is not asked) — only overwrite the keys chosen in this run. A user who reruns setup to change the theme must not lose the rest of their config.
 
 > This file intentionally stays in `~/.claude` even when `CLAUDE_CONFIG_DIR` is set — it is the dashboard's own display config, shared by every account, and the statusline always reads it from there.
 
@@ -234,6 +244,8 @@ Preset characters: `M`=model, `C`=context, `b`=contextBar, `%`=contextPercentage
   "tagPatterns": ["v*", "release-*"]
 }
 ```
+
+**Mod keys**: `"modPane"` (layout of the `/claude-dashboard-pane` pane: display mode name, preset string, or custom widget lines like `[["model","context"],["sessionIdFull"]]`; default `detailed`) and `"modBandDefault"` (`true` turns the band on at session start) are set from Turn 4. `"modBand"` (layout of the `/claude-dashboard-band` band, same format, default = status line layout) is not asked — write it only if the user requests a band layout different from the status line.
 
 **Note**: Omit `"disabledWidgets"` field entirely if user chose not to hide any widgets. Omit `"dailyBudget"` if not using budget tracking. Omit `"tagPatterns"` to use the default `["v*"]`. Omit `"separator"` if using default pipe style.
 
@@ -314,3 +326,4 @@ have hooks disabled or the status line is not updating.
 - The status line will update on the next message
 - To change settings later, run this command again
 - Custom mode allows full control over which widgets appear on each line
+- Mods (tested on Claude Code 2.1.289): `/claude-dashboard-pane [on|off]` opens or closes a pane beside the transcript; `/claude-dashboard-band [on|off]` draws the dashboard above the prompt and hides the status line for the current session only. Both take no argument to toggle. Mention both commands in the final summary, whichever Turn 4 option was chosen

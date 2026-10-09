@@ -484,6 +484,23 @@ describe('widgets', () => {
       expect(data?.percentage).toBe(15);
     });
 
+    it('falls back to total_input_tokens when current_usage is null', async () => {
+      const ctx = createContext({
+        context_window: {
+          total_input_tokens: 77000,
+          total_output_tokens: 0,
+          context_window_size: 1000000,
+          used_percentage: 8,
+          current_usage: null,
+        },
+      });
+      const data = await contextWidget.getData(ctx);
+
+      expect(data?.inputTokens).toBe(77000);
+      expect(data?.totalTokens).toBe(77000);
+      expect(data?.percentage).toBe(8);
+    });
+
     it('should render progress bar and percentage', () => {
       const ctx = createContext();
       const data = {

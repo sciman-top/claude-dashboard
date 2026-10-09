@@ -70,6 +70,22 @@ async function main() {
 
     console.log(`✓ Built dist/check-usage.js with version ${version}`);
 
+    // Build the Claude Code mod (Node-less sandbox: neutral platform, engine module external).
+    // Not minified: the engine's validator matches `$.noun.method` and `on("<event>")` literally.
+    await build({
+      entryPoints: ['scripts/mod/register.tsx'],
+      outfile: 'dist/mod.js',
+      bundle: true,
+      format: 'esm',
+      platform: 'neutral',
+      external: ['claude-code'],
+      jsx: 'transform',
+      jsxFactory: 'h',
+      define: { __VERSION__: JSON.stringify(version) },
+    });
+
+    console.log(`✓ Built dist/mod.js with version ${version}`);
+
     // Sync plugin.json
     const pluginJson = readJsonFile('./.claude-plugin/plugin.json', 'plugin.json');
     pluginJson.version = version;

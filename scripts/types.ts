@@ -240,6 +240,9 @@ export type ThemeId = 'default' | 'minimal' | 'catppuccin' | 'catppuccinLatte' |
  */
 export type SeparatorStyle = 'pipe' | 'space' | 'dot' | 'arrow';
 
+/** Layout for a dashboard mod surface: same forms as the status line (mode name, preset string, custom lines). */
+export type ModLayout = string | WidgetId[][];
+
 /**
  * User configuration stored in ~/.claude/claude-dashboard.local.json
  */
@@ -263,6 +266,12 @@ export interface Config {
    * When set, overrides displayMode with 'custom' and generates lines from the string.
    */
   preset?: string;
+  /** Dashboard mod pane layout: a display mode name, a preset string, or widget lines (default: detailed) */
+  modPane?: ModLayout;
+  /** Dashboard mod band layout: a display mode name, a preset string, or widget lines (default: the statusLine layout) */
+  modBand?: ModLayout;
+  /** Turn the dashboard mod band on when a session starts */
+  modBandDefault?: boolean;
   /** Daily budget limit in USD. Enables budget tracking widget. */
   dailyBudget?: number;
   /**

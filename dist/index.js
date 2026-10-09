@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/statusline.ts
-import { readFile as readFile11, stat as stat11 } from "fs/promises";
+import { readFile as readFile11, stat as stat12 } from "fs/promises";
 import { join as join8 } from "path";
 import { homedir as homedir4 } from "os";
 
@@ -591,7 +591,7 @@ function hashToken(token) {
 }
 
 // scripts/version.ts
-var VERSION = "1.34.0";
+var VERSION = "1.35.1";
 
 // scripts/utils/debug.ts
 var DEBUG = process.env.DEBUG === "claude-dashboard" || process.env.DEBUG === "1" || process.env.DEBUG === "true";
@@ -622,7 +622,8 @@ var CLEANABLE_PREFIXES = [
   "antigravity-usage-",
   "antigravity-token-",
   "zai-usage-",
-  "transcript-"
+  "transcript-",
+  "band-"
 ];
 var lastCleanupTime = 0;
 function fileCachePath(name) {
@@ -963,6 +964,16 @@ var en_default = {
     notInstalled: "not installed",
     errorFetching: "Error fetching data",
     noData: "No usage data available"
+  },
+  mod: {
+    paneTitle: "Dashboard",
+    paneOpened: "Dashboard pane opened.",
+    paneClosed: "Dashboard pane closed.",
+    bandOn: "Dashboard band on \u2014 statusLine hidden for this session (terminal/desktop only).",
+    bandOff: "Dashboard band off \u2014 statusLine restored.",
+    paneUsage: "Usage: /claude-dashboard-pane [on|off]",
+    bandUsage: "Usage: /claude-dashboard-band [on|off]",
+    renderFailed: "Dashboard render failed"
   }
 };
 
@@ -1025,6 +1036,16 @@ var ko_default = {
     notInstalled: "\uC124\uCE58\uB418\uC9C0 \uC54A\uC74C",
     errorFetching: "\uB370\uC774\uD130 \uAC00\uC838\uC624\uAE30 \uC624\uB958",
     noData: "\uC0AC\uC6A9\uB7C9 \uB370\uC774\uD130 \uC5C6\uC74C"
+  },
+  mod: {
+    paneTitle: "\uB300\uC2DC\uBCF4\uB4DC",
+    paneOpened: "\uB300\uC2DC\uBCF4\uB4DC \uD328\uB110\uC744 \uC5F4\uC5C8\uC2B5\uB2C8\uB2E4.",
+    paneClosed: "\uB300\uC2DC\uBCF4\uB4DC \uD328\uB110\uC744 \uB2EB\uC558\uC2B5\uB2C8\uB2E4.",
+    bandOn: "\uB300\uC2DC\uBCF4\uB4DC \uBC34\uB4DC \uCF1C\uC9D0 \u2014 \uC774 \uC138\uC158\uC758 statusLine\uC744 \uC228\uAE41\uB2C8\uB2E4 (\uD130\uBBF8\uB110/\uB370\uC2A4\uD06C\uD1B1 \uC804\uC6A9).",
+    bandOff: "\uB300\uC2DC\uBCF4\uB4DC \uBC34\uB4DC \uAEBC\uC9D0 \u2014 statusLine\uC744 \uBCF5\uC6D0\uD588\uC2B5\uB2C8\uB2E4.",
+    paneUsage: "\uC0AC\uC6A9\uBC95: /claude-dashboard-pane [on|off]",
+    bandUsage: "\uC0AC\uC6A9\uBC95: /claude-dashboard-band [on|off]",
+    renderFailed: "\uB300\uC2DC\uBCF4\uB4DC \uB80C\uB354 \uC2E4\uD328"
   }
 };
 
@@ -1338,10 +1359,11 @@ async function getContextData(ctx) {
   const contextSize = context_window?.context_window_size || 2e5;
   const officialPercent = context_window?.used_percentage;
   if (!usage) {
+    const inputTokens2 = context_window?.total_input_tokens ?? 0;
     return {
-      inputTokens: 0,
+      inputTokens: inputTokens2,
       outputTokens: 0,
-      totalTokens: 0,
+      totalTokens: inputTokens2,
       contextSize,
       percentage: typeof officialPercent === "number" ? Math.round(officialPercent) : 0
     };
@@ -1658,9 +1680,9 @@ async function countFiles(dir, pattern) {
     return 0;
   }
 }
-async function fileExists(path5) {
+async function fileExists(path6) {
   try {
-    await stat4(path5);
+    await stat4(path6);
     return true;
   } catch {
     return false;
@@ -1689,9 +1711,9 @@ async function countMcps(projectDir) {
     { path: join4(homeDir, ".config", "claude-code", "mcp.json"), key: "mcpServers" }
   ];
   const counts = await Promise.all(
-    mcpPaths.map(async ({ path: path5, key }) => {
+    mcpPaths.map(async ({ path: path6, key }) => {
       try {
-        const content = await readFile4(path5, "utf-8");
+        const content = await readFile4(path6, "utf-8");
         const config = JSON.parse(content);
         return Object.keys(config[key] || {}).length;
       } catch {
@@ -4913,6 +4935,88 @@ async function formatOutput(ctx) {
   return lines.join("\n");
 }
 
+// scripts/utils/render-mode.ts
+var MOD_UNAVAILABLE_WIDGETS = ["cacheHit"];
+var SURFACES = ["pane", "band"];
+var NAMED_MODES = ["compact", "normal", "detailed"];
+function resolveRenderMode(env) {
+  if (env.CLAUDE_DASHBOARD_MOD !== "1")
+    return { fromMod: false };
+  if (env.CLAUDE_DASHBOARD_MOD_SETTINGS === "1")
+    return { fromMod: true, printSettings: true };
+  if (env.CLAUDE_DASHBOARD_BAND_OFF) {
+    return { fromMod: true, clearSession: env.CLAUDE_DASHBOARD_BAND_OFF };
+  }
+  if (env.CLAUDE_DASHBOARD_BAND_SESSION) {
+    return { fromMod: true, surface: "band", markSession: env.CLAUDE_DASHBOARD_BAND_SESSION };
+  }
+  const requested = env.CLAUDE_DASHBOARD_SURFACE;
+  return requested && SURFACES.includes(requested) ? { fromMod: true, surface: requested } : { fromMod: true };
+}
+function resolveModLayout(config, surface, isWidget = () => true) {
+  const fallback = surface === "pane" ? { displayMode: "detailed", lines: void 0 } : {};
+  const value = surface === "pane" ? config.modPane : config.modBand;
+  if (typeof value === "string") {
+    if (NAMED_MODES.includes(value)) {
+      return { displayMode: value, lines: void 0 };
+    }
+    const lines = parsePreset(value);
+    return lines.length > 0 ? { displayMode: "custom", lines } : fallback;
+  }
+  if (Array.isArray(value)) {
+    const lines = customLines(value, isWidget);
+    return lines.length > 0 ? { displayMode: "custom", lines } : fallback;
+  }
+  return fallback;
+}
+function customLines(value, isWidget) {
+  return value.filter((line) => Array.isArray(line)).map(
+    (line) => line.filter((id) => typeof id === "string" && isWidget(id))
+  ).filter((line) => line.length > 0);
+}
+
+// scripts/utils/band-marker.ts
+import { mkdir as mkdir5, writeFile as writeFile5, unlink as unlink3, stat as stat11 } from "fs/promises";
+import path5 from "path";
+var BAND_MARKER_TTL_MS = 18e4;
+var SAFE_SESSION_ID = /^[A-Za-z0-9-]{1,128}$/;
+function bandMarkerPath(sessionId, dir = FILE_CACHE_DIR) {
+  if (!SAFE_SESSION_ID.test(sessionId))
+    return null;
+  return path5.join(dir, `band-${sessionId}`);
+}
+async function markBand(sessionId, dir = FILE_CACHE_DIR) {
+  const file = bandMarkerPath(sessionId, dir);
+  if (!file)
+    return;
+  await mkdir5(dir, { recursive: true });
+  await writeFile5(file, String(Date.now()));
+}
+async function clearBand(sessionId, dir = FILE_CACHE_DIR) {
+  const file = bandMarkerPath(sessionId, dir);
+  if (!file)
+    return;
+  try {
+    await unlink3(file);
+  } catch (err) {
+    if (!isErrnoException(err, "ENOENT"))
+      throw err;
+  }
+}
+async function isBandActive(sessionId, now = Date.now(), dir = FILE_CACHE_DIR) {
+  const file = bandMarkerPath(sessionId, dir);
+  if (!file)
+    return false;
+  try {
+    const { mtimeMs } = await stat11(file);
+    return now - mtimeMs < BAND_MARKER_TTL_MS;
+  } catch (err) {
+    if (!isErrnoException(err, "ENOENT"))
+      debugLog("band-marker", "stat failed", err);
+    return false;
+  }
+}
+
 // scripts/statusline.ts
 var CONFIG_PATH = join8(homedir4(), ".claude", "claude-dashboard.local.json");
 var configCache = null;
@@ -4930,7 +5034,7 @@ async function readStdin() {
 }
 async function loadConfig() {
   try {
-    const fileStat = await stat11(CONFIG_PATH);
+    const fileStat = await stat12(CONFIG_PATH);
     const mtime = fileStat.mtimeMs;
     if (configCache?.mtime === mtime) {
       return configCache.config;
@@ -4974,7 +5078,7 @@ function parseStdinRateLimits(stdin) {
   };
 }
 async function main() {
-  const config = await loadConfig();
+  let config = await loadConfig();
   setTheme(config.theme);
   setSeparatorStyle(config.separator);
   const translations = getTranslations(config);
@@ -4982,6 +5086,31 @@ async function main() {
   if (!stdin) {
     console.log(colorize(ICON.warning, COLORS.yellow));
     return;
+  }
+  const renderMode = resolveRenderMode(process.env);
+  if (renderMode.printSettings) {
+    console.log(JSON.stringify({ bandDefault: config.modBandDefault === true }));
+    return;
+  }
+  if (renderMode.clearSession) {
+    await clearBand(renderMode.clearSession);
+    return;
+  }
+  if (renderMode.markSession) {
+    await markBand(renderMode.markSession);
+  } else if (!renderMode.fromMod && stdin.session_id && await isBandActive(stdin.session_id)) {
+    console.log("");
+    return;
+  }
+  if (renderMode.surface) {
+    const isWidget = (id) => getWidget(id) !== void 0;
+    config = { ...config, ...resolveModLayout(config, renderMode.surface, isWidget) };
+  }
+  if (renderMode.fromMod) {
+    config = {
+      ...config,
+      disabledWidgets: [...config.disabledWidgets ?? [], ...MOD_UNAVAILABLE_WIDGETS]
+    };
   }
   const stdinLimits = parseStdinRateLimits(stdin);
   let rateLimits;
